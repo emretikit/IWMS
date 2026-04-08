@@ -4,6 +4,9 @@ target/
 *.jar
 *.war
 
+### VS Code ###
+.vscode/
+
 ### IntelliJ IDEA ###
 .idea/
 *.iml
