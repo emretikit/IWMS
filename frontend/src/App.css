@@ -1,0 +1,114 @@
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  background: #f4f7fb;
+  color: #1f2937;
+}
+
+.sidebar {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.meta {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.menu {
+  display: grid;
+  gap: 8px;
+}
+
+.menu button {
+  text-align: left;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.menu button.active {
+  background: #2563eb;
+  color: white;
+}
+
+.danger {
+  margin-top: auto;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #b91c1c;
+  color: white;
+}
+
+.content {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.card h2,
+.card h3 {
+  margin-top: 0;
+}
+
+.grid {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+
+input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+pre {
+  background: #0b1220;
+  color: #dbeafe;
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 220px;
+  overflow: auto;
+}

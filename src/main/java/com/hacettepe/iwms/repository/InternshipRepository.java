@@ -1,0 +1,19 @@
+package com.hacettepe.iwms.repository;
+
+import com.hacettepe.iwms.entity.Internship;
+import com.hacettepe.iwms.entity.InternshipStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface InternshipRepository extends JpaRepository<Internship, Long> {
+    List<Internship> findByStudentId(Long studentId);
+    List<Internship> findByAcademicPeriodId(Long periodId);
+    boolean existsByStudentIdAndCompanyIdAndAcademicPeriodId(Long studentId, Long companyId, Long periodId);
+    List<Internship> findByStatus(InternshipStatus status);
+    List<Internship> findByStatusIn(List<InternshipStatus> statuses);
+    List<Internship> findByStudentUserId(Long userId);
+    long countByAcademicPeriodId(Long periodId);
+}
