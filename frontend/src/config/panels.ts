@@ -1,44 +1,42 @@
-import type { Session } from '../types';
-
-type MenuPanel = { key: string; label: string };
+import type { MenuPanel, Session } from '../types';
 
 export function getPanels(session: Session): MenuPanel[] {
   const common: MenuPanel[] = [
-    { key: 'auth', label: 'Auth' },
-    { key: 'support', label: 'Support' },
+    { key: 'auth', label: 'Welcome', description: 'Secure sign-in and system overview' },
+    { key: 'support', label: 'Support', description: 'FAQ, chatbot and guided help' },
   ];
 
   if (!session) return common;
 
   if (session.role === 'STUDENT') {
     return [
-      ...common,
-      { key: 'application', label: 'Apply Internship' },
-      { key: 'report', label: 'Report' },
-      { key: 'history', label: 'History & Feedback' },
+      { key: 'application', label: 'Application Hub', description: 'Start and track internship applications' },
+      { key: 'report', label: 'Report Studio', description: 'Draft and submit internship reports' },
+      { key: 'history', label: 'Journey', description: 'History, feedback and personal archive' },
+      common[1],
     ];
   }
 
   if (session.role === 'SUPERVISOR') {
     return [
-      ...common,
-      { key: 'company-eval', label: 'Company Evaluation' },
-      { key: 'history', label: 'History & Feedback' },
+      { key: 'company-eval', label: 'Evaluation Desk', description: 'Review company outcomes and reports' },
+      { key: 'history', label: 'Review Archive', description: 'Past evaluations and shared feedback' },
+      common[1],
     ];
   }
 
   if (session.role === 'COORDINATOR') {
     return [
-      ...common,
-      { key: 'coordinator', label: 'Coordinator Review' },
-      { key: 'periods', label: 'Periods & Rules' },
+      { key: 'coordinator', label: 'Decision Board', description: 'Approve, reject or request revisions' },
+      { key: 'periods', label: 'Calendar Rules', description: 'Manage periods, quotas and policy rules' },
+      common[1],
     ];
   }
 
   return [
-    ...common,
-    { key: 'companies', label: 'Company Approval' },
-    { key: 'admin-ops', label: 'Admin Ops' },
-    { key: 'periods', label: 'Periods & Rules' },
+    { key: 'companies', label: 'Approval Center', description: 'Handle company onboarding decisions' },
+    { key: 'admin-ops', label: 'Command Room', description: 'Audit logs, announcements and control actions' },
+    { key: 'periods', label: 'System Rules', description: 'Configure periods and operational thresholds' },
+    common[1],
   ];
 }
