@@ -1,0 +1,492 @@
+{
+  "info": {
+    "name": "IWMS DEL2 Collection",
+    "_postman_id": "d6d5c6fd-c09d-4d2a-a4df-a21c2e68f1ef",
+    "description": "Core DEL2 backend endpoints for IWMS.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Login (Generic)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const res = pm.response.json();",
+              "if (res && res.data && res.data.token) {",
+              "  pm.collectionVariables.set('jwtToken', res.data.token);",
+              "  pm.collectionVariables.set('userRole', res.data.role);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth - Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{newUsername}}\",\n  \"email\": \"{{newEmail}}\",\n  \"password\": \"{{newPassword}}\",\n  \"role\": \"{{newRole}}\",\n  \"name\": \"Test\",\n  \"surname\": \"User\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Company - Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Acme Corp\",\n  \"address\": \"Ankara\",\n  \"engineerType\": \"COMPUTER\",\n  \"supervisorFirstName\": \"Ali\",\n  \"supervisorLastName\": \"Yilmaz\",\n  \"supervisorTitle\": \"Senior Engineer\",\n  \"supervisorEmail\": \"supervisor@acme.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/companies/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "companies",
+            "register"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Company - Pending (ADMIN)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/companies/pending",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "companies",
+            "pending"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Company - Approve (ADMIN)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/companies/{{companyId}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "companies",
+            "{{companyId}}",
+            "approve"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Periods - Create (ADMIN/COORDINATOR)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"2026 Summer Internship\",\n  \"semesterType\": \"SUMMER\",\n  \"year\": 2026,\n  \"submissionDeadline\": \"2026-08-01\",\n  \"lateDeadline\": \"2026-08-15\",\n  \"minInternshipDays\": 20,\n  \"maxOrgsPerPeriod\": 1,\n  \"active\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/periods",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "periods"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Periods - Upsert Rule",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ruleKey\": \"MIN_INTERNSHIP_DAYS\",\n  \"ruleValue\": \"20\",\n  \"description\": \"Minimum internship day count\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/periods/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "periods",
+            "rules"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Internship - Apply (STUDENT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"companyId\": {{companyId}},\n  \"academicPeriodId\": {{academicPeriodId}},\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-06-30\",\n  \"totalWorkingDays\": 20,\n  \"lectureCode\": \"BBM325\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/internships/apply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "internships",
+            "apply"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Internship - Save Draft Report (STUDENT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"templateContent\": \"Daily report draft content\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/internships/{{internshipId}}/report/draft",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "internships",
+            "{{internshipId}}",
+            "report",
+            "draft"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Company Evaluation - Submit (SUPERVISOR)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"internshipResultDocument\": \"Student performed well.\",\n  \"reportEvaluationDocument\": \"Report is acceptable.\",\n  \"signatureFilePath\": \"/tmp/signature.png\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/company-evaluations/{{internshipId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "company-evaluations",
+            "{{internshipId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Coordinator - Pending List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/coordinator/pending",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "coordinator",
+            "pending"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Coordinator - Decision",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"REVISION_REQUIRED\",\n  \"feedback\": \"Please improve report details.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/coordinator/internships/{{internshipId}}/decision",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "coordinator",
+            "internships",
+            "{{internshipId}}",
+            "decision"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin Ops - Audit Logs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/audit-logs",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "audit-logs"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Support - FAQs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/support/faqs",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "support",
+            "faqs"
+          ]
+        }
+      }
+    },
+    {
+      "name": "History - Submit Feedback",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"internshipId\": {{internshipId}},\n  \"answersJson\": \"{\\\"q1\\\":5,\\\"q2\\\":\\\"Great process\\\"}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/history/feedback",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "history",
+            "feedback"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin123"
+    },
+    {
+      "key": "newUsername",
+      "value": "student_test_01"
+    },
+    {
+      "key": "newEmail",
+      "value": "student_test_01@cs.hacettepe.edu.tr"
+    },
+    {
+      "key": "newPassword",
+      "value": "secret123"
+    },
+    {
+      "key": "newRole",
+      "value": "STUDENT"
+    },
+    {
+      "key": "jwtToken",
+      "value": ""
+    },
+    {
+      "key": "userRole",
+      "value": ""
+    },
+    {
+      "key": "companyId",
+      "value": "1"
+    },
+    {
+      "key": "academicPeriodId",
+      "value": "1"
+    },
+    {
+      "key": "internshipId",
+      "value": "1"
+    }
+  ]
+}
