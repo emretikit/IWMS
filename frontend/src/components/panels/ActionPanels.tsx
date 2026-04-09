@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { apiCall, multipartApiCall } from '../../services/api';
 import type { ApiRunner, Session } from '../../types';
 
@@ -130,6 +130,46 @@ function InsightList({ title, items }: { title: string; items: string[] }) {
 
 function ActionGrid({ children }: { children: ReactNode }) {
   return <section className="action-grid">{children}</section>;
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function openPicker() {
+    const input = inputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click();
+  }
+
+  return (
+    <label className="field date-field">
+      <span>{label}</span>
+      <div className="date-input-shell">
+        <input ref={inputRef} type="date" value={value} onChange={(e) => onChange(e.target.value)} required />
+        <button type="button" className="date-picker-button" aria-label={`Open ${label}`} onClick={openPicker}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </button>
+      </div>
+    </label>
+  );
 }
 
 function getInclusiveDayDifference(startDate: string, endDate: string) {
@@ -296,15 +336,8 @@ export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
             </label>
 
             <div className="two-column-grid">
-              <label className="field date-field">
-                <span>Start date</span>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-              </label>
-
-              <label className="field date-field">
-                <span>End date</span>
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
-              </label>
+              <DateField label="Start date" value={startDate} onChange={setStartDate} />
+              <DateField label="End date" value={endDate} onChange={setEndDate} />
             </div>
 
             <div className="two-column-grid">
@@ -417,6 +450,13 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
   const [reportFile, setReportFile] = useState<File | null>(null);
   const [reportError, setReportError] = useState('');
   const [reportSuccess, setReportSuccess] = useState('');
+  const [lastSubmissionMeta, setLastSubmissionMeta] = useState<{
+    id: number | null;
+    internshipId: number | null;
+    fileName: string;
+    submissionStatus: string;
+    submittedAt: string;
+  } | null>(null);
 
   async function loadStudentInternships() {
     const response = await apiCall('/api/internships/my', 'GET', session.token);
@@ -473,6 +513,13 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
     const response = await multipartApiCall(`/api/internships/${selectedInternshipId}/report`, 'POST', formData, session.token);
     await loadStudentInternships();
     setReportSuccess('Internship report submitted successfully.');
+    setLastSubmissionMeta({
+      id: response?.data?.id ?? null,
+      internshipId: response?.data?.internshipId ?? Number(selectedInternshipId),
+      fileName: response?.data?.fileName ?? reportFile.name,
+      submissionStatus: response?.data?.submissionStatus ?? 'SUBMITTED',
+      submittedAt: response?.data?.submittedAt ?? '',
+    });
     setReportTitle('');
     setIntroduction('');
     setCompanyOverview('');
@@ -486,27 +533,12 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
 
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="student"
-        eyebrow="Report studio"
-        title="Fill every required report section, attach a PDF, and submit the final internship report."
-        body="UC-005 now uses a structured student form. Every textbox is mandatory and the upload only accepts PDF files."
-      />
-
-      <MetricsRow
-        items={[
-          { label: 'My internships', value: String(internships.length), detail: 'Select one internship record before submitting the report.' },
-          { label: 'Required fields', value: '7', detail: 'Every report textbox is mandatory before the final submit is accepted.' },
-          { label: 'Attachment policy', value: 'PDF only', detail: 'Submissions without a PDF file are rejected.' },
-        ]}
-      />
-
       <section className="data-grid two-up">
         <article className="form-card">
           <div className="form-card-header">
             <div>
-              <p className="eyebrow">Structured form</p>
-              <h3>Internship report submission</h3>
+              <p className="eyebrow">Final report</p>
+              <h3>Submit internship report</h3>
               {reportError ? <p className="auth-error left-align">{reportError}</p> : null}
               {reportSuccess ? <p className="success-note">{reportSuccess}</p> : null}
             </div>
@@ -517,7 +549,7 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
 
           <div className="auth-form">
             <label className="field">
-              <span>Internship</span>
+              <span>Internship record</span>
               <select value={selectedInternshipId} onChange={(e) => setSelectedInternshipId(e.target.value)}>
                 {internships.length === 0 ? <option value="">No internship record found</option> : null}
                 {internships.map((internship) => (
@@ -530,37 +562,37 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
 
             <label className="field">
               <span>Report title</span>
-              <input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} placeholder="Internship report title" required />
+              <input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} placeholder="Stored inside template_content" required />
             </label>
 
             <label className="field">
               <span>Introduction</span>
-              <textarea rows={4} value={introduction} onChange={(e) => setIntroduction(e.target.value)} placeholder="Introduce the internship scope and objective" required />
+              <textarea rows={4} value={introduction} onChange={(e) => setIntroduction(e.target.value)} placeholder="Introduction section" required />
             </label>
 
             <label className="field">
               <span>Company overview</span>
-              <textarea rows={4} value={companyOverview} onChange={(e) => setCompanyOverview(e.target.value)} placeholder="Describe the company and department" required />
+              <textarea rows={4} value={companyOverview} onChange={(e) => setCompanyOverview(e.target.value)} placeholder="Company overview section" required />
             </label>
 
             <label className="field">
               <span>Work performed</span>
-              <textarea rows={5} value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} placeholder="Explain daily and weekly work in detail" required />
+              <textarea rows={5} value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} placeholder="Daily and weekly work details" required />
             </label>
 
             <label className="field">
               <span>Technologies used</span>
-              <textarea rows={4} value={technologiesUsed} onChange={(e) => setTechnologiesUsed(e.target.value)} placeholder="List tools, frameworks and technologies" required />
+              <textarea rows={4} value={technologiesUsed} onChange={(e) => setTechnologiesUsed(e.target.value)} placeholder="Tools, frameworks and technologies" required />
             </label>
 
             <label className="field">
               <span>Outcomes and learning</span>
-              <textarea rows={4} value={outcomesAndLearning} onChange={(e) => setOutcomesAndLearning(e.target.value)} placeholder="Explain what you achieved and learned" required />
+              <textarea rows={4} value={outcomesAndLearning} onChange={(e) => setOutcomesAndLearning(e.target.value)} placeholder="What you achieved and learned" required />
             </label>
 
             <label className="field">
               <span>Conclusion</span>
-              <textarea rows={4} value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="Summarize the internship experience" required />
+              <textarea rows={4} value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="Conclusion section" required />
             </label>
 
             <label className="field">
@@ -597,15 +629,33 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
         </article>
 
         <article className="form-card">
-          <p className="eyebrow">Submission rules</p>
-          <h3>What is required before submit?</h3>
+          <p className="eyebrow">Database mapping</p>
+          <h3>Values written on final submit</h3>
           <div className="detail-stack">
-            <p><strong>1.</strong> Every textbox in the form must be filled.</p>
-            <p><strong>2.</strong> A PDF file must be attached.</p>
-            <p><strong>3.</strong> The selected internship must belong to the logged-in student.</p>
-            <p><strong>4.</strong> The internship status must allow report submission.</p>
-            <p><strong>5.</strong> The academic period deadline must still be open.</p>
+            <p><strong>internship_report.internship_id:</strong> selected internship record</p>
+            <p><strong>internship_report.template_content:</strong> report title + six text sections</p>
+            <p><strong>internship_report.file_name:</strong> uploaded PDF file name</p>
+            <p><strong>internship_report.file_path:</strong> stored server path for the uploaded PDF</p>
+            <p><strong>internship_report.submission_status:</strong> `SUBMITTED`</p>
+            <p><strong>internship_report.is_draft:</strong> `false`</p>
+            <p><strong>internship_report.submitted_at:</strong> current server timestamp</p>
+            <p><strong>internship.status:</strong> `PENDING_COORDINATOR_REVIEW` after successful submit</p>
           </div>
+
+          <hr className="section-divider" />
+
+          <p className="eyebrow">Last submit</p>
+          {lastSubmissionMeta ? (
+            <div className="detail-stack">
+              <p><strong>Report ID:</strong> {lastSubmissionMeta.id ?? 'N/A'}</p>
+              <p><strong>Internship ID:</strong> {lastSubmissionMeta.internshipId ?? 'N/A'}</p>
+              <p><strong>File name:</strong> {lastSubmissionMeta.fileName || 'N/A'}</p>
+              <p><strong>Status:</strong> {lastSubmissionMeta.submissionStatus || 'N/A'}</p>
+              <p><strong>Submitted at:</strong> {lastSubmissionMeta.submittedAt || 'N/A'}</p>
+            </div>
+          ) : (
+            <p className="meta">Submit the final report once to see the returned `internship_report` metadata here.</p>
+          )}
         </article>
       </section>
     </div>
@@ -780,6 +830,8 @@ export function CompaniesPanel({ session, loading, runRequest }: PanelProps) {
 export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
   const isAdmin = session.role === 'ADMIN';
   const [periods, setPeriods] = useState<AcademicPeriod[]>([]);
+  const [periodError, setPeriodError] = useState('');
+  const [periodSuccess, setPeriodSuccess] = useState('');
   const [periodName, setPeriodName] = useState('');
   const [semesterType, setSemesterType] = useState('SUMMER');
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -796,8 +848,19 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
   }
 
   async function createPeriod() {
+    setPeriodError('');
+    setPeriodSuccess('');
+
+    if (!periodName.trim()) {
+      throw new Error('Period name is required.');
+    }
+
+    if (lateDeadline < submissionDeadline) {
+      throw new Error('Late deadline cannot be before submission deadline.');
+    }
+
     const response = await apiCall('/api/periods', 'POST', session.token, {
-      name: periodName,
+      name: periodName.trim(),
       semesterType,
       year: Number(year),
       submissionDeadline,
@@ -808,6 +871,7 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
     });
 
     await loadPeriods();
+    setPeriodSuccess('Academic period created successfully.');
     setPeriodName('');
     setSemesterType('SUMMER');
     setYear(String(new Date().getFullYear()));
@@ -846,6 +910,8 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
             <div>
               <p className="eyebrow">Active setup</p>
               <h3>Create academic period</h3>
+              {periodError ? <p className="auth-error left-align">{periodError}</p> : null}
+              {periodSuccess ? <p className="success-note">{periodSuccess}</p> : null}
             </div>
             <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Periods listed', loadPeriods)}>
               Refresh periods
@@ -875,15 +941,8 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
             </div>
 
             <div className="two-column-grid">
-              <label className="field date-field">
-                <span>Submission deadline</span>
-                <input type="date" value={submissionDeadline} onChange={(e) => setSubmissionDeadline(e.target.value)} required />
-              </label>
-
-              <label className="field date-field">
-                <span>Late deadline</span>
-                <input type="date" value={lateDeadline} onChange={(e) => setLateDeadline(e.target.value)} required />
-              </label>
+              <DateField label="Submission deadline" value={submissionDeadline} onChange={setSubmissionDeadline} />
+              <DateField label="Late deadline" value={lateDeadline} onChange={setLateDeadline} />
             </div>
 
             <div className="two-column-grid">
@@ -906,7 +965,17 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
             <button
               className="primary-button"
               disabled={loading || !periodName || !submissionDeadline || !lateDeadline || !year || !minInternshipDays || !maxOrgsPerPeriod}
-              onClick={() => void runRequest('Academic period created', createPeriod)}
+              onClick={() =>
+                void runRequest('Academic period created', async () => {
+                  try {
+                    return await createPeriod();
+                  } catch (error) {
+                    setPeriodSuccess('');
+                    setPeriodError(error instanceof Error ? error.message : String(error));
+                    throw error;
+                  }
+                })
+              }
             >
               {loading ? 'Saving...' : 'Create active period'}
             </button>

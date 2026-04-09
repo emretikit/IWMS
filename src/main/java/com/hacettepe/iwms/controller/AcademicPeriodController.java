@@ -43,6 +43,11 @@ public class AcademicPeriodController {
                                                                     @AuthenticationPrincipal CustomUserDetails currentUser) {
         User user = userRepository.findById(currentUser.getId()).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         validateDates(request);
+        if (request.isActive()) {
+            List<AcademicPeriod> activePeriods = academicPeriodRepository.findAllByIsActiveTrueOrderByYearDesc();
+            activePeriods.forEach((period) -> period.setActive(false));
+            academicPeriodRepository.saveAll(activePeriods);
+        }
         AcademicPeriod period = AcademicPeriod.builder()
                 .name(request.getName())
                 .semesterType(request.getSemesterType())
@@ -135,8 +140,20 @@ public class AcademicPeriodController {
     }
 
     private void validateDates(AcademicPeriodUpsertRequest request) {
+        if (request.getSubmissionDeadline() == null || request.getLateDeadline() == null) {
+            throw new ValidationException("Submission deadline and late deadline are required.");
+        }
         if (request.getLateDeadline().isBefore(request.getSubmissionDeadline())) {
             throw new ValidationException("Late deadline cannot be before submission deadline.");
+        }
+        if (request.getYear() == null || request.getYear() < 2000) {
+            throw new ValidationException("Please provide a valid academic year.");
+        }
+        if (request.getMinInternshipDays() == null || request.getMinInternshipDays() < 1) {
+            throw new ValidationException("Minimum internship days must be at least 1.");
+        }
+        if (request.getMaxOrgsPerPeriod() == null || request.getMaxOrgsPerPeriod() < 1) {
+            throw new ValidationException("Maximum organizations per period must be at least 1.");
         }
     }
 }
