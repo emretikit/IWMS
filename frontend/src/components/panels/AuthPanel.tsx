@@ -9,9 +9,16 @@ type Props = {
   loading: boolean;
   runRequest: ApiRunner;
   onSession: (session: NonNullable<Session>) => void;
+  onNavigateCompanyRegister: () => void;
 };
 
-export default function AuthPanel({ loading, runRequest, onSession }: Props) {
+type CompanyRegistrationProps = {
+  loading: boolean;
+  runRequest: ApiRunner;
+  onBack: () => void;
+};
+
+export default function AuthPanel({ loading, runRequest, onSession, onNavigateCompanyRegister }: Props) {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -95,7 +102,117 @@ export default function AuthPanel({ loading, runRequest, onSession }: Props) {
               {loading ? 'Signing in...' : 'Login'}
             </button>
 
+            <button type="button" disabled={loading} className="ghost-button" onClick={onNavigateCompanyRegister}>
+              Register Company
+            </button>
+
             {loginError ? <p className="auth-error">{loginError}</p> : null}
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function CompanyRegistrationPanel({ loading, runRequest, onBack }: CompanyRegistrationProps) {
+  const [companyName, setCompanyName] = useState('');
+  const [address, setAddress] = useState('');
+  const [engineerType, setEngineerType] = useState('COMPUTER');
+  const [supervisorFirstName, setSupervisorFirstName] = useState('');
+  const [supervisorLastName, setSupervisorLastName] = useState('');
+  const [supervisorTitle, setSupervisorTitle] = useState('');
+  const [supervisorEmail, setSupervisorEmail] = useState('');
+  const backgroundStyle = { '--auth-forest-image': `url(${loginImage})` } as CSSProperties;
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    const success = await runRequest('Company registration submitted', () =>
+      apiCall('/api/companies/register', 'POST', undefined, {
+        name: companyName,
+        address,
+        engineerType,
+        supervisorFirstName,
+        supervisorLastName,
+        supervisorTitle,
+        supervisorEmail,
+      }),
+    );
+
+    if (success) {
+      setCompanyName('');
+      setAddress('');
+      setEngineerType('COMPUTER');
+      setSupervisorFirstName('');
+      setSupervisorLastName('');
+      setSupervisorTitle('');
+      setSupervisorEmail('');
+    }
+  }
+
+  return (
+    <section className="auth-screen" style={backgroundStyle}>
+      <div className="auth-screen-inner">
+        <header className="auth-title">
+          <h1>Company registration</h1>
+        </header>
+
+        <div className="login-card minimal company-register-card">
+          <form onSubmit={onSubmit} className="grid auth-form">
+            <label className="field">
+              <span>Company name</span>
+              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Enter company name" required />
+            </label>
+
+            <label className="field">
+              <span>Address</span>
+              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter company address" required />
+            </label>
+
+            <label className="field">
+              <span>Engineer type</span>
+              <select value={engineerType} onChange={(e) => setEngineerType(e.target.value)}>
+                <option value="COMPUTER">Computer Engineer</option>
+                <option value="ELECTRICAL_ELECTRONIC">Electrical-Electronic Engineer</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </label>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Supervisor first name</span>
+                <input value={supervisorFirstName} onChange={(e) => setSupervisorFirstName(e.target.value)} placeholder="First name" required />
+              </label>
+
+              <label className="field">
+                <span>Supervisor last name</span>
+                <input value={supervisorLastName} onChange={(e) => setSupervisorLastName(e.target.value)} placeholder="Last name" required />
+              </label>
+            </div>
+
+            <label className="field">
+              <span>Supervisor title</span>
+              <input value={supervisorTitle} onChange={(e) => setSupervisorTitle(e.target.value)} placeholder="Job title" required />
+            </label>
+
+            <label className="field">
+              <span>Supervisor email</span>
+              <input
+                value={supervisorEmail}
+                onChange={(e) => setSupervisorEmail(e.target.value)}
+                type="email"
+                placeholder="name@company.com"
+                required
+              />
+            </label>
+
+            <button disabled={loading} className="primary-button login-submit">
+              {loading ? 'Submitting...' : 'Submit company request'}
+            </button>
+
+            <button type="button" disabled={loading} className="ghost-button" onClick={onBack}>
+              Back to login
+            </button>
           </form>
         </div>
       </div>

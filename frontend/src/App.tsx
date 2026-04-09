@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import type { Role, Session } from './types';
-import AuthPanel from './components/panels/AuthPanel';
+import AuthPanel, { CompanyRegistrationPanel } from './components/panels/AuthPanel';
 import Sidebar from './components/layout/Sidebar';
 import ResultPanel from './components/layout/ResultPanel';
 import { getPanels } from './config/panels';
@@ -14,6 +14,7 @@ import {
   HistoryPanel,
   PeriodsPanel,
   ReportPanel,
+  SupervisorApprovalPage,
   SupportPanel,
 } from './components/panels/ActionPanels';
 
@@ -38,13 +39,30 @@ function getDefaultPanel(role: Role) {
   return 'companies';
 }
 
+function getSupervisorTokenFromPath(pathname: string) {
+  const prefix = '/supervisor/token/';
+  if (!pathname.startsWith(prefix)) {
+    return null;
+  }
+
+  return decodeURIComponent(pathname.slice(prefix.length));
+}
+
 function App() {
   const [session, setSession] = useState<Session>(null);
   const [activePanel, setActivePanel] = useState('auth');
   const [feedback, setFeedback] = useState<ApiFeedback>(defaultFeedback);
   const [loading, setLoading] = useState(false);
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const [navOpen, setNavOpen] = useState(false);
 
   const panels = useMemo(() => getPanels(session), [session]);
+  const supervisorToken = useMemo(() => getSupervisorTokenFromPath(pathname), [pathname]);
+
+  function navigateTo(path: string) {
+    window.history.pushState({}, '', path);
+    setPathname(window.location.pathname);
+  }
 
   useEffect(() => {
     if (!session) {
@@ -54,6 +72,15 @@ function App() {
 
     setActivePanel(getDefaultPanel(session.role));
   }, [session]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setPathname(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   async function runRequest(title: string, request: () => Promise<unknown>) {
     setLoading(true);
@@ -84,37 +111,66 @@ function App() {
   }
 
   if (!session) {
-    return <AuthPanel loading={loading} runRequest={runRequest} onSession={setSession} />;
+    if (supervisorToken) {
+      return <SupervisorApprovalPage token={supervisorToken} loading={loading} runRequest={runRequest} onBackHome={() => navigateTo('/')} />;
+    }
+
+    if (activePanel === 'company-register' || pathname === '/company/register') {
+      return (
+        <CompanyRegistrationPanel
+          loading={loading}
+          runRequest={runRequest}
+          onBack={() => {
+            setActivePanel('auth');
+            navigateTo('/');
+          }}
+        />
+      );
+    }
+
+    return (
+      <AuthPanel
+        loading={loading}
+        runRequest={runRequest}
+        onSession={(nextSession) => {
+          setSession(nextSession);
+          navigateTo('/');
+        }}
+        onNavigateCompanyRegister={() => {
+          setActivePanel('company-register');
+          navigateTo('/company/register');
+        }}
+      />
+    );
   }
 
   return (
     <div className="layout">
       <Sidebar
-        usernameLabel={`${session.username} (${session.role})`}
-        role={session.role}
         panels={panels}
         activePanel={activePanel}
         onSelectPanel={setActivePanel}
-        showLogout
+        isOpen={navOpen}
+        onClose={() => setNavOpen(false)}
         onLogout={() => {
+          setNavOpen(false);
           setSession(null);
           setFeedback(defaultFeedback);
+          navigateTo('/');
         }}
       />
 
       <main className="content">
-        <section className="main-shell">
-          <header className="page-header">
-            <div>
-              <p className="eyebrow">Adaptive experience</p>
-              <h2>{`${session.role.toLowerCase()} workspace`}</h2>
-              <p className="meta">The interface, hierarchy and primary action blocks are tailored to the authenticated role.</p>
-            </div>
-            <div className="page-badge">
-              <span>{session.role}</span>
-            </div>
-          </header>
+        <div className="workspace-toolbar">
+          <button type="button" className="menu-toggle" aria-label="Open navigation" onClick={() => setNavOpen(true)}>
+            <span />
+            <span />
+            <span />
+          </button>
+          <span className="toolbar-label">{panels.find((panel) => panel.key === activePanel)?.label ?? session.role}</span>
+        </div>
 
+        <section className="main-shell">
           {activePanel === 'application' && session && <ApplicationPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'report' && session && <ReportPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}

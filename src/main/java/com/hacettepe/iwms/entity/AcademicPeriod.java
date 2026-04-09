@@ -1,5 +1,6 @@
 package com.hacettepe.iwms.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,6 +25,7 @@ public class AcademicPeriod {
 
     @ManyToOne
     @JoinColumn(name = "created_by")
+    @JsonIgnore
     private User createdBy;
 
     @Column(length = 100)
@@ -51,9 +53,11 @@ public class AcademicPeriod {
     private int maxOrgsPerPeriod = 1;
 
     @OneToMany(mappedBy = "academicPeriod")
+    @JsonIgnore
     private List<CourseEnrollment> enrollments;
 
     @OneToMany(mappedBy = "academicPeriod")
+    @JsonIgnore
     private List<Internship> internships;
 
     // Helper methods

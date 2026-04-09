@@ -12,6 +12,7 @@ public interface InternshipRepository extends JpaRepository<Internship, Long> {
     List<Internship> findByStudentId(Long studentId);
     List<Internship> findByAcademicPeriodId(Long periodId);
     boolean existsByStudentIdAndCompanyIdAndAcademicPeriodId(Long studentId, Long companyId, Long periodId);
+    boolean existsByStudentIdAndCompanyId(Long studentId, Long companyId);
     List<Internship> findByStatus(InternshipStatus status);
     List<Internship> findByStatusIn(List<InternshipStatus> statuses);
     List<Internship> findByStudentUserId(Long userId);

@@ -5,6 +5,7 @@ import com.hacettepe.iwms.dto.AcademicPeriodUpsertRequest;
 import com.hacettepe.iwms.dto.RuleConfigRequest;
 import com.hacettepe.iwms.entity.AcademicPeriod;
 import com.hacettepe.iwms.entity.RuleConfig;
+import com.hacettepe.iwms.entity.SemesterType;
 import com.hacettepe.iwms.entity.User;
 import com.hacettepe.iwms.repository.AcademicPeriodRepository;
 import com.hacettepe.iwms.repository.RuleConfigRepository;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +35,7 @@ public class AcademicPeriodController {
     private final RuleConfigRepository ruleConfigRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final JdbcTemplate jdbcTemplate;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR')")
@@ -40,6 +43,11 @@ public class AcademicPeriodController {
                                                                     @AuthenticationPrincipal CustomUserDetails currentUser) {
         User user = userRepository.findById(currentUser.getId()).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         validateDates(request);
+        if (request.isActive()) {
+            List<AcademicPeriod> activePeriods = academicPeriodRepository.findAllByIsActiveTrueOrderByYearDesc();
+            activePeriods.forEach((period) -> period.setActive(false));
+            academicPeriodRepository.saveAll(activePeriods);
+        }
         AcademicPeriod period = AcademicPeriod.builder()
                 .name(request.getName())
                 .semesterType(request.getSemesterType())
@@ -83,6 +91,32 @@ public class AcademicPeriodController {
         return ResponseEntity.ok(new ApiResponse<>(true, "Academic periods listed.", academicPeriodRepository.findAll()));
     }
 
+    @GetMapping("/active")
+    @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR','STUDENT')")
+    public ResponseEntity<ApiResponse<List<AcademicPeriod>>> listActivePeriods() {
+        List<AcademicPeriod> activePeriods = jdbcTemplate.query(
+                """
+                select id, name, semester_type, year, submission_deadline, late_deadline,
+                       min_internship_days, max_orgs_per_period, is_active
+                from academic_period
+                where is_active = true
+                order by year desc
+                """,
+                (rs, rowNum) -> AcademicPeriod.builder()
+                        .id(rs.getLong("id"))
+                        .name(rs.getString("name"))
+                        .semesterType(SemesterType.valueOf(rs.getString("semester_type")))
+                        .year(rs.getInt("year"))
+                        .submissionDeadline(rs.getDate("submission_deadline").toLocalDate())
+                        .lateDeadline(rs.getDate("late_deadline").toLocalDate())
+                        .minInternshipDays(rs.getInt("min_internship_days"))
+                        .maxOrgsPerPeriod(rs.getInt("max_orgs_per_period"))
+                        .isActive(rs.getBoolean("is_active"))
+                        .build()
+        );
+        return ResponseEntity.ok(new ApiResponse<>(true, "Active academic periods listed.", activePeriods));
+    }
+
     @PostMapping("/rules")
     @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR')")
     public ResponseEntity<ApiResponse<RuleConfig>> upsertRule(@Valid @RequestBody RuleConfigRequest request,
@@ -106,8 +140,20 @@ public class AcademicPeriodController {
     }
 
     private void validateDates(AcademicPeriodUpsertRequest request) {
+        if (request.getSubmissionDeadline() == null || request.getLateDeadline() == null) {
+            throw new ValidationException("Submission deadline and late deadline are required.");
+        }
         if (request.getLateDeadline().isBefore(request.getSubmissionDeadline())) {
             throw new ValidationException("Late deadline cannot be before submission deadline.");
+        }
+        if (request.getYear() == null || request.getYear() < 2000) {
+            throw new ValidationException("Please provide a valid academic year.");
+        }
+        if (request.getMinInternshipDays() == null || request.getMinInternshipDays() < 1) {
+            throw new ValidationException("Minimum internship days must be at least 1.");
+        }
+        if (request.getMaxOrgsPerPeriod() == null || request.getMaxOrgsPerPeriod() < 1) {
+            throw new ValidationException("Maximum organizations per period must be at least 1.");
         }
     }
 }

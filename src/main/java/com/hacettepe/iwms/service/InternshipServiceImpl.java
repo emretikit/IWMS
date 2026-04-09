@@ -2,6 +2,7 @@ package com.hacettepe.iwms.service;
 
 import com.hacettepe.iwms.dto.InternshipApplicationRequest;
 import com.hacettepe.iwms.dto.InternshipReportDto;
+import com.hacettepe.iwms.dto.InternshipReportSubmitRequest;
 import com.hacettepe.iwms.dto.InternshipResponseDto;
 import com.hacettepe.iwms.entity.*;
 import com.hacettepe.iwms.exception.ResourceNotFoundException;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
@@ -71,6 +73,14 @@ public class InternshipServiceImpl implements IInternshipService {
             internship.setTotalWorkingDays(req.getTotalWorkingDays());
             internship.setStatus(InternshipStatus.PENDING_COMPANY_APPROVAL);
 
+            if (req.getStartDate().isAfter(req.getEndDate())) {
+                throw new ValidationException("Start date cannot be after end date.");
+            }
+
+            if (req.getTotalWorkingDays() == null || req.getTotalWorkingDays() < period.getMinInternshipDays()) {
+                throw new ValidationException("Total working days has to be at least " + period.getMinInternshipDays() + ".");
+            }
+
             for (InternshipRuleValidator validator : ruleValidators) {
                 validator.validate(internship, student, period);
             }
@@ -102,13 +112,13 @@ public class InternshipServiceImpl implements IInternshipService {
             throw e;
         } catch (Exception e) {
             log.error("An unexpected error occurred during internship application: {}", e.getMessage(), e);
-            throw new RuntimeException("An unexpected error occurred during internship application.", e);
+            throw new ValidationException("Application could not be completed: " + e.getMessage());
         }
     }
 
     @Override
     @Transactional
-    public InternshipReportDto submitReport(Long internshipId, MultipartFile file, Long studentUserId) {
+    public InternshipReportDto submitReport(Long internshipId, InternshipReportSubmitRequest request, MultipartFile file, Long studentUserId) {
         Internship internship = internshipRepository.findById(internshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
 
@@ -125,13 +135,17 @@ public class InternshipServiceImpl implements IInternshipService {
             throw new ValidationException("The submission deadline has passed.");
         }
 
+        validateReportRequest(request, file);
+
         String fileName = fileStorageService.store(file, "reports/internship-" + internshipId);
 
-        InternshipReport report = new InternshipReport();
+        InternshipReport report = internshipReportRepository.findByInternshipId(internshipId).orElse(new InternshipReport());
         report.setInternship(internship);
         report.setFilePath(fileName);
         report.setFileName(file.getOriginalFilename());
+        report.setTemplateContent(buildTemplateContent(request));
         report.setSubmittedAt(LocalDateTime.now());
+        report.setDraft(false);
         report.setSubmissionStatus(SubmissionStatus.SUBMITTED);
 
         InternshipReport savedReport = internshipReportRepository.save(report);
@@ -197,6 +211,7 @@ public class InternshipServiceImpl implements IInternshipService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<InternshipResponseDto> getStudentInternships(Long studentUserId) {
         Student student = studentRepository.findByUserId(studentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found for user ID: " + studentUserId));
@@ -204,6 +219,7 @@ public class InternshipServiceImpl implements IInternshipService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public InternshipResponseDto getInternshipById(Long internshipId) {
         Internship internship = internshipRepository.findById(internshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
@@ -211,6 +227,7 @@ public class InternshipServiceImpl implements IInternshipService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public InternshipResponseDto getInternshipByToken(String token) {
         SupervisorToken supervisorToken = supervisorTokenRepository.findByToken(token)
                 .orElseThrow(() -> new ResourceNotFoundException("Token not found."));
@@ -232,5 +249,50 @@ public class InternshipServiceImpl implements IInternshipService {
             supervisorTokenRepository.save(token);
             throw new ValidationException("Invalid verification code. Remaining attempts: " + (5 - token.getAttemptCount()));
         }
+    }
+
+    private void validateReportRequest(InternshipReportSubmitRequest request, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ValidationException("A PDF report file is required.");
+        }
+
+        String originalFilename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "";
+        String lowerCaseName = originalFilename.toLowerCase();
+        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+        if (!lowerCaseName.endsWith(".pdf") || !contentType.contains("pdf")) {
+            throw new ValidationException("Only PDF files are accepted.");
+        }
+    }
+
+    private String buildTemplateContent(InternshipReportSubmitRequest request) {
+        return """
+                Report Title: %s
+
+                Introduction:
+                %s
+
+                Company Overview:
+                %s
+
+                Work Performed:
+                %s
+
+                Technologies Used:
+                %s
+
+                Outcomes And Learning:
+                %s
+
+                Conclusion:
+                %s
+                """.formatted(
+                request.getReportTitle(),
+                request.getIntroduction(),
+                request.getCompanyOverview(),
+                request.getWorkPerformed(),
+                request.getTechnologiesUsed(),
+                request.getOutcomesAndLearning(),
+                request.getConclusion()
+        );
     }
 }

@@ -31,7 +31,7 @@ public class InternshipReport {
     @Column(name = "file_name", length = 255)
     private String fileName;
 
-    @Lob
+    @Column(name = "template_content", columnDefinition = "TEXT")
     private String templateContent;
 
     @Enumerated(EnumType.STRING)

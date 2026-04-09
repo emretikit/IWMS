@@ -4,6 +4,7 @@ import com.hacettepe.iwms.config.CustomUserDetails;
 import com.hacettepe.iwms.dto.ApiResponse;
 import com.hacettepe.iwms.dto.InternshipApplicationRequest;
 import com.hacettepe.iwms.dto.InternshipReportDto;
+import com.hacettepe.iwms.dto.InternshipReportSubmitRequest;
 import com.hacettepe.iwms.dto.InternshipResponseDto;
 import com.hacettepe.iwms.dto.ReportDraftRequest;
 import com.hacettepe.iwms.entity.Internship;
@@ -51,9 +52,10 @@ public class InternshipController {
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ApiResponse<InternshipReportDto>> submitReport(
             @PathVariable Long internshipId,
+            @Valid @RequestPart("report") InternshipReportSubmitRequest request,
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
-        InternshipReportDto responseDto = internshipService.submitReport(internshipId, file, currentUser.getId());
+        InternshipReportDto responseDto = internshipService.submitReport(internshipId, request, file, currentUser.getId());
         return new ResponseEntity<>(new ApiResponse<>(true, "Internship report submitted successfully.", responseDto), HttpStatus.OK);
     }
 
