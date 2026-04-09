@@ -1,57 +1,47 @@
-import type { MenuPanel, Role } from '../../types';
+import type { MenuPanel } from '../../types';
 
 type SidebarProps = {
-  usernameLabel: string;
-  role?: Role;
   panels: MenuPanel[];
   activePanel: string;
+  isOpen: boolean;
   onSelectPanel: (key: string) => void;
-  showLogout: boolean;
+  onClose: () => void;
   onLogout: () => void;
 };
 
-export default function Sidebar({
-  usernameLabel,
-  role,
-  panels,
-  activePanel,
-  onSelectPanel,
-  showLogout,
-  onLogout,
-}: SidebarProps) {
+export default function Sidebar({ panels, activePanel, isOpen, onSelectPanel, onClose, onLogout }: SidebarProps) {
   return (
-    <aside className="sidebar">
-      <div className="brand-block">
-        <p className="eyebrow">Infinite Runtime</p>
-        <h1>Internship Workspace</h1>
-        <p className="meta">Production-grade control surface for internship operations.</p>
-      </div>
+    <>
+      <button type="button" className={isOpen ? 'drawer-backdrop open' : 'drawer-backdrop'} aria-label="Close navigation" onClick={onClose} />
 
-      <div className="identity-card">
-        <span className="role-badge">{role ?? 'GUEST'}</span>
-        <p className="identity-name">{usernameLabel}</p>
-        <p className="meta">Adaptive navigation changes with the authenticated role.</p>
-      </div>
-
-      <div className="menu">
-        {panels.map((panel) => (
-          <button key={panel.key} className={activePanel === panel.key ? 'active nav-button' : 'nav-button'} onClick={() => onSelectPanel(panel.key)}>
-            <span>{panel.label}</span>
-            <small>{panel.description}</small>
+      <aside className={isOpen ? 'sidebar-drawer open' : 'sidebar-drawer'}>
+        <div className="drawer-header">
+          <span className="drawer-title">Menu</span>
+          <button type="button" className="drawer-close" aria-label="Close navigation" onClick={onClose}>
+            x
           </button>
-        ))}
-      </div>
+        </div>
 
-      <div className="sidebar-note">
-        <p className="eyebrow">Live workspace</p>
-        <p className="meta">Each action below talks directly to the backend environment and returns traceable API feedback.</p>
-      </div>
+        <nav className="drawer-nav">
+          {panels.map((panel) => (
+            <button
+              key={panel.key}
+              type="button"
+              className={activePanel === panel.key ? 'drawer-link active' : 'drawer-link'}
+              onClick={() => {
+                onSelectPanel(panel.key);
+                onClose();
+              }}
+            >
+              {panel.label}
+            </button>
+          ))}
+        </nav>
 
-      {showLogout && (
-        <button className="danger" onClick={onLogout}>
-          Sign out
+        <button type="button" className="drawer-logout" onClick={onLogout}>
+          Logout
         </button>
-      )}
-    </aside>
+      </aside>
+    </>
   );
 }

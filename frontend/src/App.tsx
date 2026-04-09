@@ -54,6 +54,7 @@ function App() {
   const [feedback, setFeedback] = useState<ApiFeedback>(defaultFeedback);
   const [loading, setLoading] = useState(false);
   const [pathname, setPathname] = useState(window.location.pathname);
+  const [navOpen, setNavOpen] = useState(false);
 
   const panels = useMemo(() => getPanels(session), [session]);
   const supervisorToken = useMemo(() => getSupervisorTokenFromPath(pathname), [pathname]);
@@ -146,13 +147,13 @@ function App() {
   return (
     <div className="layout">
       <Sidebar
-        usernameLabel={`${session.username} (${session.role})`}
-        role={session.role}
         panels={panels}
         activePanel={activePanel}
         onSelectPanel={setActivePanel}
-        showLogout
+        isOpen={navOpen}
+        onClose={() => setNavOpen(false)}
         onLogout={() => {
+          setNavOpen(false);
           setSession(null);
           setFeedback(defaultFeedback);
           navigateTo('/');
@@ -160,18 +161,16 @@ function App() {
       />
 
       <main className="content">
-        <section className="main-shell">
-          <header className="page-header">
-            <div>
-              <p className="eyebrow">Adaptive experience</p>
-              <h2>{`${session.role.toLowerCase()} workspace`}</h2>
-              <p className="meta">The interface, hierarchy and primary action blocks are tailored to the authenticated role.</p>
-            </div>
-            <div className="page-badge">
-              <span>{session.role}</span>
-            </div>
-          </header>
+        <div className="workspace-toolbar">
+          <button type="button" className="menu-toggle" aria-label="Open navigation" onClick={() => setNavOpen(true)}>
+            <span />
+            <span />
+            <span />
+          </button>
+          <span className="toolbar-label">{panels.find((panel) => panel.key === activePanel)?.label ?? session.role}</span>
+        </div>
 
+        <section className="main-shell">
           {activePanel === 'application' && session && <ApplicationPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'report' && session && <ReportPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}
