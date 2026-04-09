@@ -296,12 +296,12 @@ export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
             </label>
 
             <div className="two-column-grid">
-              <label className="field">
+              <label className="field date-field">
                 <span>Start date</span>
                 <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
               </label>
 
-              <label className="field">
+              <label className="field date-field">
                 <span>End date</span>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
               </label>
@@ -875,12 +875,12 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
             </div>
 
             <div className="two-column-grid">
-              <label className="field">
+              <label className="field date-field">
                 <span>Submission deadline</span>
                 <input type="date" value={submissionDeadline} onChange={(e) => setSubmissionDeadline(e.target.value)} required />
               </label>
 
-              <label className="field">
+              <label className="field date-field">
                 <span>Late deadline</span>
                 <input type="date" value={lateDeadline} onChange={(e) => setLateDeadline(e.target.value)} required />
               </label>
