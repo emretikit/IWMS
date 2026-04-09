@@ -179,6 +179,20 @@ function getInclusiveDayDifference(startDate: string, endDate: string) {
   return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
 }
 
+function normalizeDateForApi(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const localizedMatch = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (localizedMatch) {
+    const [, day, month, year] = localizedMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  return value;
+}
+
 export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
   const [approvedCompanies, setApprovedCompanies] = useState<ApprovedCompany[]>([]);
   const [activePeriods, setActivePeriods] = useState<AcademicPeriod[]>([]);
@@ -758,11 +772,18 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
     setPeriodError('');
     setPeriodSuccess('');
 
+    const normalizedSubmissionDeadline = normalizeDateForApi(submissionDeadline);
+    const normalizedLateDeadline = normalizeDateForApi(lateDeadline);
+
     if (!periodName.trim()) {
       throw new Error('Period name is required.');
     }
 
-    if (lateDeadline < submissionDeadline) {
+    if (!normalizedSubmissionDeadline || !normalizedLateDeadline) {
+      throw new Error('Please select both submission and late deadlines.');
+    }
+
+    if (normalizedLateDeadline < normalizedSubmissionDeadline) {
       throw new Error('Late deadline cannot be before submission deadline.');
     }
 
@@ -770,8 +791,8 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
       name: periodName.trim(),
       semesterType,
       year: Number(year),
-      submissionDeadline,
-      lateDeadline,
+      submissionDeadline: normalizedSubmissionDeadline,
+      lateDeadline: normalizedLateDeadline,
       minInternshipDays: Number(minInternshipDays),
       maxOrgsPerPeriod: Number(maxOrgsPerPeriod),
       active,
