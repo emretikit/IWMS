@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import type { Role, Session } from './types';
-import AuthPanel from './components/panels/AuthPanel';
+import AuthPanel, { CompanyRegistrationPanel } from './components/panels/AuthPanel';
 import Sidebar from './components/layout/Sidebar';
 import ResultPanel from './components/layout/ResultPanel';
 import { getPanels } from './config/panels';
@@ -14,6 +14,7 @@ import {
   HistoryPanel,
   PeriodsPanel,
   ReportPanel,
+  SupervisorApprovalPage,
   SupportPanel,
 } from './components/panels/ActionPanels';
 
@@ -38,13 +39,29 @@ function getDefaultPanel(role: Role) {
   return 'companies';
 }
 
+function getSupervisorTokenFromPath(pathname: string) {
+  const prefix = '/supervisor/token/';
+  if (!pathname.startsWith(prefix)) {
+    return null;
+  }
+
+  return decodeURIComponent(pathname.slice(prefix.length));
+}
+
 function App() {
   const [session, setSession] = useState<Session>(null);
   const [activePanel, setActivePanel] = useState('auth');
   const [feedback, setFeedback] = useState<ApiFeedback>(defaultFeedback);
   const [loading, setLoading] = useState(false);
+  const [pathname, setPathname] = useState(window.location.pathname);
 
   const panels = useMemo(() => getPanels(session), [session]);
+  const supervisorToken = useMemo(() => getSupervisorTokenFromPath(pathname), [pathname]);
+
+  function navigateTo(path: string) {
+    window.history.pushState({}, '', path);
+    setPathname(window.location.pathname);
+  }
 
   useEffect(() => {
     if (!session) {
@@ -54,6 +71,15 @@ function App() {
 
     setActivePanel(getDefaultPanel(session.role));
   }, [session]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setPathname(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   async function runRequest(title: string, request: () => Promise<unknown>) {
     setLoading(true);
@@ -84,7 +110,37 @@ function App() {
   }
 
   if (!session) {
-    return <AuthPanel loading={loading} runRequest={runRequest} onSession={setSession} />;
+    if (supervisorToken) {
+      return <SupervisorApprovalPage token={supervisorToken} loading={loading} runRequest={runRequest} onBackHome={() => navigateTo('/')} />;
+    }
+
+    if (activePanel === 'company-register' || pathname === '/company/register') {
+      return (
+        <CompanyRegistrationPanel
+          loading={loading}
+          runRequest={runRequest}
+          onBack={() => {
+            setActivePanel('auth');
+            navigateTo('/');
+          }}
+        />
+      );
+    }
+
+    return (
+      <AuthPanel
+        loading={loading}
+        runRequest={runRequest}
+        onSession={(nextSession) => {
+          setSession(nextSession);
+          navigateTo('/');
+        }}
+        onNavigateCompanyRegister={() => {
+          setActivePanel('company-register');
+          navigateTo('/company/register');
+        }}
+      />
+    );
   }
 
   return (
@@ -99,6 +155,7 @@ function App() {
         onLogout={() => {
           setSession(null);
           setFeedback(defaultFeedback);
+          navigateTo('/');
         }}
       />
 

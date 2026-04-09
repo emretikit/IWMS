@@ -5,6 +5,7 @@ import com.hacettepe.iwms.dto.AcademicPeriodUpsertRequest;
 import com.hacettepe.iwms.dto.RuleConfigRequest;
 import com.hacettepe.iwms.entity.AcademicPeriod;
 import com.hacettepe.iwms.entity.RuleConfig;
+import com.hacettepe.iwms.entity.SemesterType;
 import com.hacettepe.iwms.entity.User;
 import com.hacettepe.iwms.repository.AcademicPeriodRepository;
 import com.hacettepe.iwms.repository.RuleConfigRepository;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +35,7 @@ public class AcademicPeriodController {
     private final RuleConfigRepository ruleConfigRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final JdbcTemplate jdbcTemplate;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR')")
@@ -81,6 +84,32 @@ public class AcademicPeriodController {
     @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR')")
     public ResponseEntity<ApiResponse<List<AcademicPeriod>>> listPeriods() {
         return ResponseEntity.ok(new ApiResponse<>(true, "Academic periods listed.", academicPeriodRepository.findAll()));
+    }
+
+    @GetMapping("/active")
+    @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR','STUDENT')")
+    public ResponseEntity<ApiResponse<List<AcademicPeriod>>> listActivePeriods() {
+        List<AcademicPeriod> activePeriods = jdbcTemplate.query(
+                """
+                select id, name, semester_type, year, submission_deadline, late_deadline,
+                       min_internship_days, max_orgs_per_period, is_active
+                from academic_period
+                where is_active = true
+                order by year desc
+                """,
+                (rs, rowNum) -> AcademicPeriod.builder()
+                        .id(rs.getLong("id"))
+                        .name(rs.getString("name"))
+                        .semesterType(SemesterType.valueOf(rs.getString("semester_type")))
+                        .year(rs.getInt("year"))
+                        .submissionDeadline(rs.getDate("submission_deadline").toLocalDate())
+                        .lateDeadline(rs.getDate("late_deadline").toLocalDate())
+                        .minInternshipDays(rs.getInt("min_internship_days"))
+                        .maxOrgsPerPeriod(rs.getInt("max_orgs_per_period"))
+                        .isActive(rs.getBoolean("is_active"))
+                        .build()
+        );
+        return ResponseEntity.ok(new ApiResponse<>(true, "Active academic periods listed.", activePeriods));
     }
 
     @PostMapping("/rules")

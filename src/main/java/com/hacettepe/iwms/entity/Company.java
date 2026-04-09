@@ -25,7 +25,7 @@ public class Company {
     @Column(nullable = false, length = 200)
     private String name;
 
-    @Lob
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String address;
 
     @Enumerated(EnumType.STRING)

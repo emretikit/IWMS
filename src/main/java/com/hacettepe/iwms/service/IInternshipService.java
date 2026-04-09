@@ -1,6 +1,7 @@
 package com.hacettepe.iwms.service;
 
 import com.hacettepe.iwms.dto.InternshipApplicationRequest;
+import com.hacettepe.iwms.dto.InternshipReportSubmitRequest;
 import com.hacettepe.iwms.dto.InternshipResponseDto;
 import com.hacettepe.iwms.dto.InternshipReportDto;
 import com.hacettepe.iwms.entity.InternshipReport;
@@ -15,6 +16,6 @@ public interface IInternshipService {
     List<InternshipResponseDto> getStudentInternships(Long studentUserId);
     InternshipResponseDto getInternshipById(Long internshipId);
     InternshipResponseDto getInternshipByToken(String token);
-    InternshipReportDto submitReport(Long internshipId, MultipartFile file, Long studentUserId);
+    InternshipReportDto submitReport(Long internshipId, InternshipReportSubmitRequest request, MultipartFile file, Long studentUserId);
     InternshipReport saveReportDraft(Long internshipId, Long studentUserId, String templateContent);
 }

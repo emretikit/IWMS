@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { apiCall } from '../../services/api';
+import { useEffect, useState, type ReactNode } from 'react';
+import { apiCall, multipartApiCall } from '../../services/api';
 import type { ApiRunner, Session } from '../../types';
 
 type PanelProps = {
@@ -20,6 +20,45 @@ type MetricProps = {
   label: string;
   value: string;
   detail: string;
+};
+
+type ApprovedCompany = {
+  id: number;
+  name: string;
+  address: string;
+  approvalStatus: string;
+  supervisors?: Array<{
+    id: number;
+    firstName: string;
+    lastName: string;
+    title: string;
+    companyEmail: string;
+    engineerType: string;
+  }>;
+};
+
+type AcademicPeriod = {
+  id: number;
+  name: string;
+  semesterType: string;
+  year: number;
+  submissionDeadline: string;
+  lateDeadline: string;
+  minInternshipDays: number;
+  maxOrgsPerPeriod: number;
+  active: boolean;
+};
+
+type InternshipRecord = {
+  id: number;
+  studentName: string;
+  companyName: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  totalWorkingDays: number;
+  hasReport: boolean;
+  hasEvaluation: boolean;
 };
 
 function WorkspaceHero({
@@ -93,115 +132,529 @@ function ActionGrid({ children }: { children: ReactNode }) {
   return <section className="action-grid">{children}</section>;
 }
 
+function getInclusiveDayDifference(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
+}
+
 export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
+  const [approvedCompanies, setApprovedCompanies] = useState<ApprovedCompany[]>([]);
+  const [activePeriods, setActivePeriods] = useState<AcademicPeriod[]>([]);
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [dataWarning, setDataWarning] = useState('');
+  const [submitMessage, setSubmitMessage] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [totalWorkingDays, setTotalWorkingDays] = useState('20');
+  const [lectureCode, setLectureCode] = useState('BBM325');
+
+  async function loadUc4Data() {
+    const [companyResponse, periodResponse, internshipResponse] = await Promise.allSettled([
+      apiCall('/api/companies/approved', 'GET', session.token),
+      apiCall('/api/periods/active', 'GET', session.token),
+      apiCall('/api/internships/my', 'GET', session.token),
+    ]);
+
+    const nextCompanies = companyResponse.status === 'fulfilled' ? companyResponse.value?.data ?? [] : [];
+    const nextPeriods = periodResponse.status === 'fulfilled' ? periodResponse.value?.data ?? [] : [];
+    const nextInternships = internshipResponse.status === 'fulfilled' ? internshipResponse.value?.data ?? [] : [];
+    const warnings = [
+      companyResponse.status === 'rejected' ? 'Approved companies could not be loaded.' : '',
+      periodResponse.status === 'rejected' ? 'Active periods could not be loaded. Restart the backend if the new endpoint is not active yet.' : '',
+      internshipResponse.status === 'rejected' ? 'Internship history could not be loaded.' : '',
+    ].filter(Boolean);
+
+    setApprovedCompanies(nextCompanies);
+    setActivePeriods(nextPeriods);
+    setInternships(nextInternships);
+    setDataWarning(warnings.join(' '));
+    setSelectedCompanyId((current) => current || (nextCompanies[0] ? String(nextCompanies[0].id) : ''));
+    setSelectedPeriodId((current) => current || (nextPeriods[0] ? String(nextPeriods[0].id) : ''));
+
+    return {
+      approvedCompanies: nextCompanies.length,
+      activePeriods: nextPeriods.length,
+      internships: nextInternships.length,
+      warnings,
+    };
+  }
+
+  useEffect(() => {
+    void loadUc4Data();
+  }, [session.token]);
+
+  const selectedCompany = approvedCompanies.find((company) => String(company.id) === selectedCompanyId);
+  const selectedPeriod = activePeriods.find((period) => String(period.id) === selectedPeriodId);
+  const requestedDays = Number(totalWorkingDays);
+
+  async function submitApplication() {
+    const minDays = selectedPeriod?.minInternshipDays ?? 20;
+
+    setSubmitMessage('');
+    setSubmitError('');
+
+    if (Number.isNaN(requestedDays) || requestedDays < minDays) {
+      const message = `Total working days has to be at least ${minDays}.`;
+      setSubmitError(message);
+      throw new Error(message);
+    }
+
+    if (selectedCompany && internships.some((internship) => internship.companyName === selectedCompany.name)) {
+      const message = 'You cannot apply to the same company more than once.';
+      setSubmitError(message);
+      throw new Error(message);
+    }
+
+    if (!startDate || !endDate) {
+      const message = 'Start date and end date are required.';
+      setSubmitError(message);
+      throw new Error(message);
+    }
+
+    const expectedDays = getInclusiveDayDifference(startDate, endDate);
+    if (expectedDays !== requestedDays) {
+      const message = `Total working days must match the date range. Expected ${expectedDays} days for the selected dates.`;
+      setSubmitError(message);
+      throw new Error(message);
+    }
+
+    const response = await apiCall('/api/internships/apply', 'POST', session.token, {
+      companyId: Number(selectedCompanyId),
+      academicPeriodId: Number(selectedPeriodId),
+      startDate,
+      endDate,
+      totalWorkingDays: Number(totalWorkingDays),
+      lectureCode,
+    });
+
+    await loadUc4Data();
+    setSubmitMessage('Internship application submitted successfully. Your request is now waiting for company approval.');
+    return response;
+  }
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
         tone="student"
         eyebrow="Student cockpit"
-        title="Everything needed to launch an internship application with confidence."
-        body="Track your readiness, submit the internship request, and keep your academic flow aligned from one curated student workspace."
+        title="Apply to an approved company, track the request, and stay aligned with the internship workflow."
+        body="This UC-004 workspace pulls approved companies, active academic periods and your live application history into one student-facing flow."
       />
 
       <MetricsRow
         items={[
-          { label: 'Eligibility', value: 'Ready', detail: 'Profile and minimum period assumptions look valid.' },
-          { label: 'Target window', value: 'June 2026', detail: 'Suggested internship period for the sample application flow.' },
-          { label: 'Lecture binding', value: 'BBM325', detail: 'Default academic mapping included in the request payload.' },
+          { label: 'Approved companies', value: String(approvedCompanies.length), detail: 'Only approved organizations can be selected for internship applications.' },
+          { label: 'Active periods', value: String(activePeriods.length), detail: 'Students can only submit against active academic periods.' },
+          { label: 'My applications', value: String(internships.length), detail: 'Track pending, approved and rejected applications from one place.' },
         ]}
       />
 
-      <ActionGrid>
-        <ActionCard
-          title="Send internship application"
-          body="Submit the sample internship application to the backend using the active student session."
-          actionLabel="Create application"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Internship application created', () =>
-              apiCall('/api/internships/apply', 'POST', session.token, {
-                companyId: 1,
-                academicPeriodId: 1,
-                startDate: '2026-06-01',
-                endDate: '2026-06-30',
-                totalWorkingDays: 20,
-                lectureCode: 'BBM325',
-              }),
-            )
-          }
-        />
-        <ActionCard
-          title="Open report studio"
-          body="Jump into the report workspace and continue with draft-based reporting once the internship starts."
-          actionLabel="Save sample draft"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Draft report saved', () =>
-              apiCall('/api/internships/1/report/draft', 'POST', session.token, {
-                templateContent: 'Draft report content',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Suggested sequence"
-          items={[
-            'Confirm the academic period and company record before submitting.',
-            'Use the student report workspace to keep weekly progress current.',
-            'Review final history and feedback after the internship is closed.',
-          ]}
-        />
-      </ActionGrid>
+      <section className="data-grid two-up">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Application form</p>
+              <h3>Submit internship application</h3>
+              <p className="meta">If the company list is empty, ask the admin to approve a company and create an active period first.</p>
+              {dataWarning ? <p className="auth-error left-align">{dataWarning}</p> : null}
+              {submitError ? <p className="auth-error left-align">{submitError}</p> : null}
+              {submitMessage ? <p className="success-note">{submitMessage}</p> : null}
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('UC-004 data refreshed', loadUc4Data)}>
+              Refresh data
+            </button>
+          </div>
+
+          <div className="auth-form">
+            <label className="field">
+              <span>Approved company</span>
+              <select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value)} disabled={!approvedCompanies.length}>
+                {approvedCompanies.length === 0 ? <option value="">No approved company available</option> : null}
+                {approvedCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Academic period</span>
+              <select value={selectedPeriodId} onChange={(e) => setSelectedPeriodId(e.target.value)} disabled={!activePeriods.length}>
+                {activePeriods.length === 0 ? <option value="">No active period available</option> : null}
+                {activePeriods.map((period) => (
+                  <option key={period.id} value={period.id}>
+                    {period.name} ({period.semesterType} {period.year})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Start date</span>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>End date</span>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+              </label>
+            </div>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Total working days</span>
+                <input type="number" min={1} value={totalWorkingDays} onChange={(e) => setTotalWorkingDays(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Lecture code</span>
+                <input value={lectureCode} onChange={(e) => setLectureCode(e.target.value)} placeholder="BBM325" required />
+              </label>
+            </div>
+
+            <button
+              className="primary-button"
+              disabled={loading || !selectedCompanyId || !selectedPeriodId || !startDate || !endDate || !totalWorkingDays || !lectureCode}
+              onClick={() =>
+                void runRequest('Internship application submitted', async () => {
+                  try {
+                    return await submitApplication();
+                  } catch (error) {
+                    setSubmitMessage('');
+                    setSubmitError(error instanceof Error ? error.message : String(error));
+                    throw error;
+                  }
+                })
+              }
+            >
+              {loading ? 'Submitting...' : 'Submit application'}
+            </button>
+          </div>
+        </article>
+
+        <article className="form-card">
+          <p className="eyebrow">Selected company</p>
+          <h3>{selectedCompany ? selectedCompany.name : 'Choose a company'}</h3>
+          <p className="meta">{selectedCompany ? selectedCompany.address : 'Pick an approved company to see supervisor information.'}</p>
+
+          {selectedCompany?.supervisors?.[0] ? (
+            <div className="detail-stack">
+              <p><strong>Supervisor:</strong> {selectedCompany.supervisors[0].firstName} {selectedCompany.supervisors[0].lastName}</p>
+              <p><strong>Title:</strong> {selectedCompany.supervisors[0].title}</p>
+              <p><strong>Email:</strong> {selectedCompany.supervisors[0].companyEmail}</p>
+              <p><strong>Engineer:</strong> {selectedCompany.supervisors[0].engineerType}</p>
+            </div>
+          ) : (
+            <p className="meta">Supervisor details will appear here when the selected company has a registered supervisor record.</p>
+          )}
+
+          <hr className="section-divider" />
+
+          <p className="eyebrow">Selected period</p>
+          <h3>{selectedPeriod ? `${selectedPeriod.name} (${selectedPeriod.semesterType} ${selectedPeriod.year})` : 'Choose an active period'}</h3>
+          <div className="detail-stack">
+            <p><strong>Submission deadline:</strong> {selectedPeriod?.submissionDeadline ?? 'N/A'}</p>
+            <p><strong>Late deadline:</strong> {selectedPeriod?.lateDeadline ?? 'N/A'}</p>
+            <p><strong>Minimum internship days:</strong> {selectedPeriod?.minInternshipDays ?? 'N/A'}</p>
+          </div>
+        </article>
+      </section>
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Application tracker</p>
+            <h3>My internship applications</h3>
+          </div>
+        </div>
+
+        <div className="application-list">
+          {internships.length === 0 ? (
+            <p className="meta">No internship application has been submitted yet.</p>
+          ) : (
+            internships.map((internship) => (
+              <article key={internship.id} className="application-item">
+                <div className="application-item-head">
+                  <div>
+                    <h4>{internship.companyName}</h4>
+                    <p className="meta">
+                      {internship.startDate} - {internship.endDate}
+                    </p>
+                  </div>
+                  <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                </div>
+                <div className="application-item-body">
+                  <p><strong>Working days:</strong> {internship.totalWorkingDays}</p>
+                  <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                  <p><strong>Company evaluation:</strong> {internship.hasEvaluation ? 'Yes' : 'No'}</p>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
 
 export function ReportPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [selectedInternshipId, setSelectedInternshipId] = useState('');
+  const [reportTitle, setReportTitle] = useState('');
+  const [introduction, setIntroduction] = useState('');
+  const [companyOverview, setCompanyOverview] = useState('');
+  const [workPerformed, setWorkPerformed] = useState('');
+  const [technologiesUsed, setTechnologiesUsed] = useState('');
+  const [outcomesAndLearning, setOutcomesAndLearning] = useState('');
+  const [conclusion, setConclusion] = useState('');
+  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [reportError, setReportError] = useState('');
+  const [reportSuccess, setReportSuccess] = useState('');
+
+  async function loadStudentInternships() {
+    const response = await apiCall('/api/internships/my', 'GET', session.token);
+    const nextInternships = response?.data ?? [];
+    setInternships(nextInternships);
+    setSelectedInternshipId((current) => current || (nextInternships[0] ? String(nextInternships[0].id) : ''));
+    return response;
+  }
+
+  useEffect(() => {
+    void loadStudentInternships();
+  }, [session.token]);
+
+  async function submitStructuredReport() {
+    setReportError('');
+    setReportSuccess('');
+
+    if (!selectedInternshipId) {
+      throw new Error('Please select an internship before submitting the report.');
+    }
+
+    if (!reportTitle || !introduction || !companyOverview || !workPerformed || !technologiesUsed || !outcomesAndLearning || !conclusion) {
+      throw new Error('All report text fields must be filled in.');
+    }
+
+    if (!reportFile) {
+      throw new Error('Please upload a PDF report file.');
+    }
+
+    if (reportFile.type !== 'application/pdf' && !reportFile.name.toLowerCase().endsWith('.pdf')) {
+      throw new Error('Only PDF files are accepted.');
+    }
+
+    const formData = new FormData();
+    formData.append(
+      'report',
+      new Blob(
+        [
+          JSON.stringify({
+            reportTitle,
+            introduction,
+            companyOverview,
+            workPerformed,
+            technologiesUsed,
+            outcomesAndLearning,
+            conclusion,
+          }),
+        ],
+        { type: 'application/json' },
+      ),
+    );
+    formData.append('file', reportFile);
+
+    const response = await multipartApiCall(`/api/internships/${selectedInternshipId}/report`, 'POST', formData, session.token);
+    await loadStudentInternships();
+    setReportSuccess('Internship report submitted successfully.');
+    setReportTitle('');
+    setIntroduction('');
+    setCompanyOverview('');
+    setWorkPerformed('');
+    setTechnologiesUsed('');
+    setOutcomesAndLearning('');
+    setConclusion('');
+    setReportFile(null);
+    return response;
+  }
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
         tone="student"
         eyebrow="Report studio"
-        title="Build a clean internship report workflow instead of chasing scattered drafts."
-        body="This screen is tuned for students who need to keep draft momentum, version clarity and final submission discipline."
+        title="Fill every required report section, attach a PDF, and submit the final internship report."
+        body="UC-005 now uses a structured student form. Every textbox is mandatory and the upload only accepts PDF files."
       />
 
       <MetricsRow
         items={[
-          { label: 'Current mode', value: 'Drafting', detail: 'Live save flow connected to the backend draft endpoint.' },
-          { label: 'Review state', value: 'Pending', detail: 'Coordinator feedback becomes visible after formal submission.' },
-          { label: 'Attachment policy', value: 'Tracked', detail: 'Documents and signatures can be added in later iterations.' },
+          { label: 'My internships', value: String(internships.length), detail: 'Select one internship record before submitting the report.' },
+          { label: 'Required fields', value: '7', detail: 'Every report textbox is mandatory before the final submit is accepted.' },
+          { label: 'Attachment policy', value: 'PDF only', detail: 'Submissions without a PDF file are rejected.' },
         ]}
       />
 
-      <ActionGrid>
-        <ActionCard
-          title="Save draft"
-          body="Persist the current report body as a draft and keep the workflow moving without a final submit."
-          actionLabel="Save draft now"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Report draft updated', () =>
-              apiCall('/api/internships/1/report/draft', 'POST', session.token, {
-                templateContent: 'Draft report content',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Report quality checklist"
-          items={[
-            'Explain daily work with concrete technical detail.',
-            'Align the narrative with the lecture code and internship scope.',
-            'Leave enough time for coordinator revisions before the deadline.',
-          ]}
-        />
-      </ActionGrid>
+      <section className="data-grid two-up">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Structured form</p>
+              <h3>Internship report submission</h3>
+              {reportError ? <p className="auth-error left-align">{reportError}</p> : null}
+              {reportSuccess ? <p className="success-note">{reportSuccess}</p> : null}
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Student internships refreshed', loadStudentInternships)}>
+              Refresh internships
+            </button>
+          </div>
+
+          <div className="auth-form">
+            <label className="field">
+              <span>Internship</span>
+              <select value={selectedInternshipId} onChange={(e) => setSelectedInternshipId(e.target.value)}>
+                {internships.length === 0 ? <option value="">No internship record found</option> : null}
+                {internships.map((internship) => (
+                  <option key={internship.id} value={internship.id}>
+                    #{internship.id} - {internship.companyName} ({internship.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Report title</span>
+              <input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} placeholder="Internship report title" required />
+            </label>
+
+            <label className="field">
+              <span>Introduction</span>
+              <textarea rows={4} value={introduction} onChange={(e) => setIntroduction(e.target.value)} placeholder="Introduce the internship scope and objective" required />
+            </label>
+
+            <label className="field">
+              <span>Company overview</span>
+              <textarea rows={4} value={companyOverview} onChange={(e) => setCompanyOverview(e.target.value)} placeholder="Describe the company and department" required />
+            </label>
+
+            <label className="field">
+              <span>Work performed</span>
+              <textarea rows={5} value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} placeholder="Explain daily and weekly work in detail" required />
+            </label>
+
+            <label className="field">
+              <span>Technologies used</span>
+              <textarea rows={4} value={technologiesUsed} onChange={(e) => setTechnologiesUsed(e.target.value)} placeholder="List tools, frameworks and technologies" required />
+            </label>
+
+            <label className="field">
+              <span>Outcomes and learning</span>
+              <textarea rows={4} value={outcomesAndLearning} onChange={(e) => setOutcomesAndLearning(e.target.value)} placeholder="Explain what you achieved and learned" required />
+            </label>
+
+            <label className="field">
+              <span>Conclusion</span>
+              <textarea rows={4} value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="Summarize the internship experience" required />
+            </label>
+
+            <label className="field">
+              <span>PDF report file</span>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(e) => {
+                  setReportFile(e.target.files?.[0] ?? null);
+                  setReportError('');
+                }}
+                required
+              />
+            </label>
+
+            <button
+              className="primary-button"
+              disabled={loading || !selectedInternshipId}
+              onClick={() =>
+                void runRequest('Internship report submitted', async () => {
+                  try {
+                    return await submitStructuredReport();
+                  } catch (error) {
+                    setReportSuccess('');
+                    setReportError(error instanceof Error ? error.message : String(error));
+                    throw error;
+                  }
+                })
+              }
+            >
+              {loading ? 'Submitting...' : 'Submit final report'}
+            </button>
+          </div>
+        </article>
+
+        <article className="form-card">
+          <p className="eyebrow">Submission rules</p>
+          <h3>What is required before submit?</h3>
+          <div className="detail-stack">
+            <p><strong>1.</strong> Every textbox in the form must be filled.</p>
+            <p><strong>2.</strong> A PDF file must be attached.</p>
+            <p><strong>3.</strong> The selected internship must belong to the logged-in student.</p>
+            <p><strong>4.</strong> The internship status must allow report submission.</p>
+            <p><strong>5.</strong> The academic period deadline must still be open.</p>
+          </div>
+        </article>
+      </section>
     </div>
   );
 }
 
 export function CompaniesPanel({ session, loading, runRequest }: PanelProps) {
+  const [pendingCompanies, setPendingCompanies] = useState<any[]>([]);
+  const [approvedCompanies, setApprovedCompanies] = useState<ApprovedCompany[]>([]);
+  const [rejectReasons, setRejectReasons] = useState<Record<number, string>>({});
+
+  async function loadApprovedCompanies() {
+    const response = await apiCall('/api/companies/approved', 'GET', session.token);
+    setApprovedCompanies(response?.data ?? []);
+    return response;
+  }
+
+  async function refreshCompanies() {
+    const [pendingResponse, approvedResponse] = await Promise.all([
+      apiCall('/api/companies/pending', 'GET', session.token),
+      apiCall('/api/companies/approved', 'GET', session.token),
+    ]);
+
+    setPendingCompanies(pendingResponse?.data ?? []);
+    setApprovedCompanies(approvedResponse?.data ?? []);
+
+    return {
+      pendingCompanies: (pendingResponse?.data ?? []).length,
+      approvedCompanies: (approvedResponse?.data ?? []).length,
+    };
+  }
+
+  async function approveCompany(companyId: number) {
+    const response = await apiCall(`/api/companies/${companyId}/approve`, 'PUT', session.token);
+    await refreshCompanies();
+    return response;
+  }
+
+  async function rejectCompany(companyId: number) {
+    const reason = (rejectReasons[companyId] ?? '').trim() || 'Rejected by admin review';
+    const response = await apiCall(`/api/companies/${companyId}/reject?reason=${encodeURIComponent(reason)}`, 'PUT', session.token);
+    await refreshCompanies();
+    return response;
+  }
+
+  useEffect(() => {
+    void refreshCompanies();
+  }, [session.token]);
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
@@ -213,42 +666,162 @@ export function CompaniesPanel({ session, loading, runRequest }: PanelProps) {
 
       <MetricsRow
         items={[
-          { label: 'Pending queue', value: 'Live', detail: 'Fetch real pending company data with one action.' },
-          { label: 'Decision path', value: 'Fast lane', detail: 'Approve or reject records directly from the workspace.' },
+          { label: 'Pending queue', value: String(pendingCompanies.length), detail: 'Every new company application lands here first.' },
+          { label: 'Approved companies', value: String(approvedCompanies.length), detail: 'Students can only see companies that appear in this approved list.' },
           { label: 'Traceability', value: 'Audited', detail: 'Every action can be cross-checked through the audit stream.' },
         ]}
       />
 
       <ActionGrid>
         <ActionCard
-          title="List pending companies"
-          body="Load the company approval queue and inspect the latest onboarding candidates."
-          actionLabel="Fetch pending queue"
+          title="Refresh company directories"
+          body="Reload both pending and approved company lists to verify what students can currently access."
+          actionLabel="Refresh all"
           disabled={loading}
-          onAction={() => runRequest('Pending companies fetched', () => apiCall('/api/companies/pending', 'GET', session.token))}
-        />
-        <ActionCard
-          title="Approve company #1"
-          body="Run a sample approval action for the first company record and validate the admin approval workflow."
-          actionLabel="Approve sample"
-          disabled={loading}
-          onAction={() => runRequest('Company approved', () => apiCall('/api/companies/1/approve', 'PUT', session.token))}
+          onAction={() => runRequest('Company directories refreshed', refreshCompanies)}
         />
         <InsightList
           title="Operations focus"
           items={[
             'Use pending queue visibility to reduce company onboarding delays.',
             'Pair approval actions with audit log review in the command room.',
-            'Keep period rules aligned when new organizations enter the system.',
+            'Students only see the records that move from pending into the approved directory.',
           ]}
         />
       </ActionGrid>
+
+      <section className="company-request-list">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Approved directory</p>
+              <h3>Registered and approved companies</h3>
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Approved companies loaded', loadApprovedCompanies)}>
+              Refresh approved
+            </button>
+          </div>
+
+          <div className="application-list">
+            {approvedCompanies.length === 0 ? (
+              <p className="meta">There is no approved company yet. Students will see an empty selection list until at least one company is approved.</p>
+            ) : (
+              approvedCompanies.map((company) => (
+                <article key={`approved-${company.id}`} className="application-item">
+                  <div className="application-item-head">
+                    <div>
+                      <h4>{company.name}</h4>
+                      <p className="meta">{company.address}</p>
+                    </div>
+                    <span className="status-chip approved">{company.approvalStatus}</span>
+                  </div>
+                  <div className="application-item-body">
+                    <p><strong>Supervisor:</strong> {company.supervisors?.[0]?.firstName} {company.supervisors?.[0]?.lastName}</p>
+                    <p><strong>Email:</strong> {company.supervisors?.[0]?.companyEmail ?? 'N/A'}</p>
+                    <p><strong>Engineer:</strong> {company.supervisors?.[0]?.engineerType ?? 'N/A'}</p>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="company-request-list">
+        {pendingCompanies.length === 0 ? (
+          <article className="request-card">
+            <h3>Pending requests cleared</h3>
+            <p className="meta">New company applications will appear here as soon as they are submitted from the public registration screen.</p>
+          </article>
+        ) : (
+          pendingCompanies.map((company) => (
+            <article key={company.id} className="request-card">
+              <div className="request-card-header">
+                <div>
+                  <h3>{company.name}</h3>
+                  <p className="meta">{company.address}</p>
+                </div>
+                <span className="request-status">{company.approvalStatus}</span>
+              </div>
+
+              <div className="request-details">
+                <p><strong>Supervisor:</strong> {company.supervisors?.[0]?.firstName} {company.supervisors?.[0]?.lastName}</p>
+                <p><strong>Title:</strong> {company.supervisors?.[0]?.title}</p>
+                <p><strong>Email:</strong> {company.supervisors?.[0]?.companyEmail}</p>
+                <p><strong>Engineer:</strong> {company.supervisors?.[0]?.engineerType}</p>
+              </div>
+
+              <label className="field">
+                <span>Rejection reason</span>
+                <textarea
+                  rows={3}
+                  value={rejectReasons[company.id] ?? ''}
+                  onChange={(e) => setRejectReasons((current) => ({ ...current, [company.id]: e.target.value }))}
+                  placeholder="Add an optional reason before rejecting"
+                />
+              </label>
+
+              <div className="request-actions">
+                <button disabled={loading} className="primary-button" onClick={() => void runRequest(`Company ${company.name} approved`, () => approveCompany(company.id))}>
+                  Approve
+                </button>
+                <button disabled={loading} className="ghost-button danger-button" onClick={() => void runRequest(`Company ${company.name} rejected`, () => rejectCompany(company.id))}>
+                  Reject
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </section>
     </div>
   );
 }
 
 export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
   const isAdmin = session.role === 'ADMIN';
+  const [periods, setPeriods] = useState<AcademicPeriod[]>([]);
+  const [periodName, setPeriodName] = useState('');
+  const [semesterType, setSemesterType] = useState('SUMMER');
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [submissionDeadline, setSubmissionDeadline] = useState('');
+  const [lateDeadline, setLateDeadline] = useState('');
+  const [minInternshipDays, setMinInternshipDays] = useState('20');
+  const [maxOrgsPerPeriod, setMaxOrgsPerPeriod] = useState('1');
+  const [active, setActive] = useState(true);
+
+  async function loadPeriods() {
+    const response = await apiCall('/api/periods', 'GET', session.token);
+    setPeriods(response?.data ?? []);
+    return response;
+  }
+
+  async function createPeriod() {
+    const response = await apiCall('/api/periods', 'POST', session.token, {
+      name: periodName,
+      semesterType,
+      year: Number(year),
+      submissionDeadline,
+      lateDeadline,
+      minInternshipDays: Number(minInternshipDays),
+      maxOrgsPerPeriod: Number(maxOrgsPerPeriod),
+      active,
+    });
+
+    await loadPeriods();
+    setPeriodName('');
+    setSemesterType('SUMMER');
+    setYear(String(new Date().getFullYear()));
+    setSubmissionDeadline('');
+    setLateDeadline('');
+    setMinInternshipDays('20');
+    setMaxOrgsPerPeriod('1');
+    setActive(true);
+    return response;
+  }
+
+  useEffect(() => {
+    void loadPeriods();
+  }, [session.token]);
 
   return (
     <div className="workspace-stack">
@@ -261,20 +834,116 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
 
       <MetricsRow
         items={[
+          { label: 'Configured periods', value: String(periods.length), detail: 'All academic periods currently stored in the system.' },
           { label: 'Rule engine', value: 'Mutable', detail: 'System rules can be listed and updated on demand.' },
-          { label: 'Academic cadence', value: 'Aligned', detail: 'Period definitions keep application windows coherent.' },
           { label: 'Risk level', value: 'Controlled', detail: 'One workspace for governance instead of scattered admin forms.' },
         ]}
       />
 
+      <section className="data-grid two-up">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Active setup</p>
+              <h3>Create academic period</h3>
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Periods listed', loadPeriods)}>
+              Refresh periods
+            </button>
+          </div>
+
+          <div className="auth-form">
+            <label className="field">
+              <span>Period name</span>
+              <input value={periodName} onChange={(e) => setPeriodName(e.target.value)} placeholder="2026 Summer Internship" required />
+            </label>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Semester</span>
+                <select value={semesterType} onChange={(e) => setSemesterType(e.target.value)}>
+                  <option value="FALL">Fall</option>
+                  <option value="SPRING">Spring</option>
+                  <option value="SUMMER">Summer</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Year</span>
+                <input type="number" value={year} onChange={(e) => setYear(e.target.value)} required />
+              </label>
+            </div>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Submission deadline</span>
+                <input type="date" value={submissionDeadline} onChange={(e) => setSubmissionDeadline(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Late deadline</span>
+                <input type="date" value={lateDeadline} onChange={(e) => setLateDeadline(e.target.value)} required />
+              </label>
+            </div>
+
+            <div className="two-column-grid">
+              <label className="field">
+                <span>Minimum internship days</span>
+                <input type="number" min={1} value={minInternshipDays} onChange={(e) => setMinInternshipDays(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Max organizations per period</span>
+                <input type="number" min={1} value={maxOrgsPerPeriod} onChange={(e) => setMaxOrgsPerPeriod(e.target.value)} required />
+              </label>
+            </div>
+
+            <label className="checkbox-row">
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              <span>Set this period as active</span>
+            </label>
+
+            <button
+              className="primary-button"
+              disabled={loading || !periodName || !submissionDeadline || !lateDeadline || !year || !minInternshipDays || !maxOrgsPerPeriod}
+              onClick={() => void runRequest('Academic period created', createPeriod)}
+            >
+              {loading ? 'Saving...' : 'Create active period'}
+            </button>
+          </div>
+        </article>
+
+        <article className="form-card">
+          <p className="eyebrow">Configured periods</p>
+          <h3>Current academic periods</h3>
+          <div className="application-list">
+            {periods.length === 0 ? (
+              <p className="meta">No academic period is configured yet.</p>
+            ) : (
+              periods.map((period) => (
+                <article key={period.id} className="application-item">
+                  <div className="application-item-head">
+                    <div>
+                      <h4>{period.name}</h4>
+                      <p className="meta">
+                        {period.semesterType} {period.year}
+                      </p>
+                    </div>
+                    <span className={`status-chip ${period.active ? 'approved' : ''}`}>{period.active ? 'ACTIVE' : 'INACTIVE'}</span>
+                  </div>
+                  <div className="application-item-body">
+                    <p><strong>Submission:</strong> {period.submissionDeadline}</p>
+                    <p><strong>Late:</strong> {period.lateDeadline}</p>
+                    <p><strong>Min days:</strong> {period.minInternshipDays}</p>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
       <ActionGrid>
-        <ActionCard
-          title="List academic periods"
-          body="Fetch the active period catalog to inspect timeline definitions and lifecycle dates."
-          actionLabel="Load periods"
-          disabled={loading}
-          onAction={() => runRequest('Periods listed', () => apiCall('/api/periods', 'GET', session.token))}
-        />
         <ActionCard
           title="Update minimum day rule"
           body="Apply a sample rule update for minimum internship day count and validate rule management."
@@ -293,8 +962,8 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
         <InsightList
           title="Governance notes"
           items={[
-            'Period health directly affects application and reporting flow quality.',
-            'Minimum day requirements should stay visible to students early.',
+            'Students can only apply when at least one active period exists.',
+            'Approved company data and active period data together unlock the UC-004 student form.',
             'Rule changes are safer when paired with a quick audit review.',
           ]}
         />
@@ -553,5 +1222,92 @@ export function HistoryPanel({ session, loading, runRequest }: PanelProps) {
         />
       </ActionGrid>
     </div>
+  );
+}
+
+export function SupervisorApprovalPage({
+  token,
+  loading,
+  runRequest,
+  onBackHome,
+}: {
+  token: string;
+  loading: boolean;
+  runRequest: ApiRunner;
+  onBackHome: () => void;
+}) {
+  const [verificationCode, setVerificationCode] = useState('');
+  const [internship, setInternship] = useState<InternshipRecord | null>(null);
+  const [loadError, setLoadError] = useState('');
+
+  async function loadTokenData() {
+    const response = await apiCall(`/api/internships/token/${token}`, 'GET');
+    setInternship(response?.data ?? null);
+    setLoadError('');
+    return response;
+  }
+
+  useEffect(() => {
+    loadTokenData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    });
+  }, [token]);
+
+  async function handleDecision(action: 'approve' | 'reject') {
+    const response = await apiCall(`/api/internships/token/${token}/${action}?code=${encodeURIComponent(verificationCode)}`, 'PUT');
+    await loadTokenData();
+    return response;
+  }
+
+  return (
+    <section className="auth-screen">
+      <div className="auth-screen-inner">
+        <header className="auth-title">
+          <h1>Supervisor approval workspace</h1>
+        </header>
+
+        <div className="login-card minimal company-register-card supervisor-card">
+          <div className="detail-stack">
+            <p className="eyebrow">Public approval link</p>
+            <h3>{internship ? internship.companyName : 'Loading internship details'}</h3>
+            <p className="meta">
+              {internship
+                ? `Review the student internship request and apply your decision using the verification code shared with you.`
+                : 'Fetching internship details from the secure token link.'}
+            </p>
+          </div>
+
+          {loadError ? <p className="auth-error">{loadError}</p> : null}
+
+          {internship ? (
+            <div className="detail-stack">
+              <p><strong>Student:</strong> {internship.studentName}</p>
+              <p><strong>Company:</strong> {internship.companyName}</p>
+              <p><strong>Dates:</strong> {internship.startDate} - {internship.endDate}</p>
+              <p><strong>Total working days:</strong> {internship.totalWorkingDays}</p>
+              <p><strong>Status:</strong> {internship.status}</p>
+            </div>
+          ) : null}
+
+          <label className="field">
+            <span>Verification code</span>
+            <input value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} placeholder="Enter 6-digit code" required />
+          </label>
+
+          <div className="request-actions">
+            <button className="primary-button" disabled={loading || !verificationCode.trim()} onClick={() => void runRequest('Internship approved by supervisor', () => handleDecision('approve'))}>
+              {loading ? 'Processing...' : 'Approve internship'}
+            </button>
+            <button className="ghost-button danger-button" disabled={loading || !verificationCode.trim()} onClick={() => void runRequest('Internship rejected by supervisor', () => handleDecision('reject'))}>
+              Reject internship
+            </button>
+          </div>
+
+          <button type="button" className="ghost-button" onClick={onBackHome}>
+            Back to login
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

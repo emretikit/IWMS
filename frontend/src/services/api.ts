@@ -17,3 +17,18 @@ export async function apiCall(path: string, method: ApiMethod, token?: string, b
   }
   return data;
 }
+
+export async function multipartApiCall(path: string, method: ApiMethod, formData: FormData, token?: string) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message ?? 'Request failed');
+  }
+  return data;
+}

@@ -94,21 +94,25 @@ public class CompanyServiceImpl implements ICompanyService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<CompanyResponseDto> getPendingCompanies() {
         return companyMapper.toCompanyResponseDtoList(companyRepository.findByApprovalStatus(ApprovalStatus.PENDING));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<CompanyResponseDto> getAllCompanies() {
         return companyMapper.toCompanyResponseDtoList(companyRepository.findAll());
     }
     
     @Override
+    @Transactional(readOnly = true)
     public List<CompanyResponseDto> getApprovedCompanies() {
         return companyMapper.toCompanyResponseDtoList(companyRepository.findByApprovalStatus(ApprovalStatus.APPROVED));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CompanyResponseDto getCompanyById(Long companyId) {
         Company company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + companyId));

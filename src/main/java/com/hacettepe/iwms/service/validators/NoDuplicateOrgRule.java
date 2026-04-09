@@ -16,13 +16,12 @@ public class NoDuplicateOrgRule implements InternshipRuleValidator {
 
     @Override
     public void validate(Internship internship, Student student, AcademicPeriod period) {
-        boolean exists = internshipRepository.existsByStudentIdAndCompanyIdAndAcademicPeriodId(
+        boolean exists = internshipRepository.existsByStudentIdAndCompanyId(
                 student.getId(),
-                internship.getCompany().getId(),
-                period.getId()
+                internship.getCompany().getId()
         );
         if (exists) {
-            throw new ValidationException("Validation failed: You have already applied to this company in the same academic period.");
+            throw new ValidationException("You cannot apply to the same company more than once.");
         }
     }
 }
