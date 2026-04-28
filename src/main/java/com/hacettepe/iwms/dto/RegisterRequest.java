@@ -26,4 +26,7 @@ public class RegisterRequest {
 
     private String name;
     private String surname;
+
+    // Öğrenci rolü için sınıf bilgisi
+    private String year;
 }

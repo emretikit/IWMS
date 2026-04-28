@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/support")
@@ -32,7 +33,17 @@ public class SupportController {
 
     @GetMapping("/chatbot")
     public ResponseEntity<ApiResponse<String>> chatbot(@RequestParam String question) {
-        String fallback = "I could not find an exact answer for: " + question + ". Please contact internship coordinator by email.";
-        return ResponseEntity.ok(new ApiResponse<>(true, "Chatbot response.", fallback));
+        // Find an exact match for the question, ignoring case.
+        Optional<FaqEntry> faqMatch = faqEntryRepository.findByQuestionContainingIgnoreCase(question)
+                .stream()
+                .filter(faq -> faq.getQuestion().equalsIgnoreCase(question))
+                .findFirst();
+
+        if (faqMatch.isPresent()) {
+            return ResponseEntity.ok(new ApiResponse<>(true, "Chatbot response.", faqMatch.get().getAnswer()));
+        } else {
+            String fallback = "I could not find an exact answer for: '" + question + "'. Please contact your internship coordinator by email.";
+            return ResponseEntity.ok(new ApiResponse<>(true, "Chatbot response.", fallback));
+        }
     }
 }
