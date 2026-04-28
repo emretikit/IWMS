@@ -27,6 +27,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -56,8 +57,16 @@ public class AuthService {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new ValidationException("Email is already in use!");
         }
-        if (request.getRole() == Role.STUDENT && !request.getEmail().toLowerCase().endsWith("@" + studentEmailDomain)) {
-            throw new ValidationException("Students must register with @" + studentEmailDomain + " email.");
+        if (request.getRole() == Role.STUDENT) {
+            if (!request.getEmail().toLowerCase().endsWith("@" + studentEmailDomain)) {
+                throw new ValidationException("Students must register with @" + studentEmailDomain + " email.");
+            }
+            if (!StringUtils.hasText(request.getYear())) {
+                throw new ValidationException("Student 'year' must be provided.");
+            }
+            if ("1".equals(request.getYear())) {
+                throw new ValidationException("First-year students are not eligible for an internship.");
+            }
         }
 
         User user = User.builder()
@@ -72,13 +81,11 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
-        // Sisteme bir öğrenci kaydedildiğinde, ilişkili Student tablosuna da kayıt atmamız gerekiyor
         if (request.getRole() == Role.STUDENT) {
             Student student = new Student();
             student.setUser(savedUser);
-            // Test aşamasında olduğumuz için rastgele bir öğrenci numarası ve izin verilen bir yıl (2, 3, 4, GRADUATE) atıyoruz
             student.setStudentNumber("STU-" + UUID.randomUUID().toString().substring(0, 8));
-            student.setCurrentYear("3"); // <-- HATA ÇÖZÜMÜ: 3. sınıf öğrencisi olarak kaydediyoruz
+            student.setCurrentYear(request.getYear());
             studentRepository.save(student);
         }
     }
