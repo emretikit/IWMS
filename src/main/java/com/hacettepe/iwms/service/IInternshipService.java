@@ -11,11 +11,10 @@ import java.util.List;
 
 public interface IInternshipService {
     InternshipResponseDto applyForInternship(InternshipApplicationRequest req, Long studentUserId);
-    InternshipResponseDto approveByToken(String token, String verificationCode);
-    InternshipResponseDto rejectByToken(String token, String verificationCode);
+    InternshipResponseDto approveBySupervisor(Long internshipId, Long supervisorUserId);
+    InternshipResponseDto rejectBySupervisor(Long internshipId, Long supervisorUserId);
     List<InternshipResponseDto> getStudentInternships(Long studentUserId);
     InternshipResponseDto getInternshipById(Long internshipId);
-    InternshipResponseDto getInternshipByToken(String token);
     InternshipReportDto submitReport(Long internshipId, InternshipReportSubmitRequest request, MultipartFile file, Long studentUserId);
     InternshipReport saveReportDraft(Long internshipId, Long studentUserId, String templateContent);
 }

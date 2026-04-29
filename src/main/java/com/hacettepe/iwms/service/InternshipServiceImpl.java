@@ -21,8 +21,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -33,8 +31,8 @@ public class InternshipServiceImpl implements IInternshipService {
     private final StudentRepository studentRepository;
     private final CompanyRepository companyRepository;
     private final AcademicPeriodRepository academicPeriodRepository;
-    private final SupervisorTokenRepository supervisorTokenRepository;
     private final InternshipSupervisorRepository supervisorRepository;
+    private final UserRepository userRepository;
     private final InternshipReportRepository internshipReportRepository;
     private final InternshipMapper internshipMapper;
     private final InternshipReportMapper internshipReportMapper;
@@ -87,24 +85,7 @@ public class InternshipServiceImpl implements IInternshipService {
 
             Internship savedInternship = internshipRepository.save(internship);
 
-            String tokenValue = UUID.randomUUID().toString();
-            String verificationCode = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
-            SupervisorToken supervisorToken = SupervisorToken.builder()
-                    .internship(savedInternship)
-                    .supervisorEmail(supervisor.getCompanyEmail())
-                    .token(tokenValue)
-                    .verificationCode(verificationCode)
-                    .status(TokenStatus.PENDING)
-                    .expiresAt(LocalDateTime.now().plusDays(7))
-                    .build();
-            supervisorTokenRepository.save(supervisorToken);
-
-            log.info("--- SUPERVISOR NOTIFICATION (SIMULATED) ---");
-            log.info("To: {}", supervisor.getCompanyEmail());
-            log.info("Subject: Internship Application Approval Request");
-            log.info("Body: Please review the application at: http://localhost:3000/supervisor/token/{}", tokenValue);
-            log.info("Your verification code is: {}", verificationCode);
-            log.info("-------------------------------------------");
+            log.info("Internship {} created and waiting supervisor approval.", savedInternship.getId());
 
             return internshipMapper.toDto(savedInternship);
         } catch (ResourceNotFoundException | ValidationException e) {
@@ -174,39 +155,23 @@ public class InternshipServiceImpl implements IInternshipService {
 
     @Override
     @Transactional
-    public InternshipResponseDto approveByToken(String token, String verificationCode) {
-        SupervisorToken supervisorToken = supervisorTokenRepository.findByToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Token not found."));
-
-        validateToken(supervisorToken, verificationCode);
-
-        Internship internship = supervisorToken.getInternship();
+    public InternshipResponseDto approveBySupervisor(Long internshipId, Long supervisorUserId) {
+        Internship internship = internshipRepository.findById(internshipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
+        validateSupervisorAccess(internship, supervisorUserId);
         internship.setStatus(InternshipStatus.APPROVED);
-        supervisorToken.setStatus(TokenStatus.VERIFIED);
-        supervisorToken.setVerifiedAt(LocalDateTime.now());
-
         internshipRepository.save(internship);
-        supervisorTokenRepository.save(supervisorToken);
-
         return internshipMapper.toDto(internship);
     }
 
     @Override
     @Transactional
-    public InternshipResponseDto rejectByToken(String token, String verificationCode) {
-        SupervisorToken supervisorToken = supervisorTokenRepository.findByToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Token not found."));
-
-        validateToken(supervisorToken, verificationCode);
-
-        Internship internship = supervisorToken.getInternship();
+    public InternshipResponseDto rejectBySupervisor(Long internshipId, Long supervisorUserId) {
+        Internship internship = internshipRepository.findById(internshipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
+        validateSupervisorAccess(internship, supervisorUserId);
         internship.setStatus(InternshipStatus.REJECTED);
-        supervisorToken.setStatus(TokenStatus.VERIFIED);
-        supervisorToken.setVerifiedAt(LocalDateTime.now());
-
         internshipRepository.save(internship);
-        supervisorTokenRepository.save(supervisorToken);
-
         return internshipMapper.toDto(internship);
     }
 
@@ -226,28 +191,24 @@ public class InternshipServiceImpl implements IInternshipService {
         return internshipMapper.toDto(internship);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public InternshipResponseDto getInternshipByToken(String token) {
-        SupervisorToken supervisorToken = supervisorTokenRepository.findByToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Token not found."));
-        return internshipMapper.toDto(supervisorToken.getInternship());
-    }
-
-    private void validateToken(SupervisorToken token, String verificationCode) {
-        if (token.isExpired()) {
-            throw new ValidationException("This link has expired.");
+    private void validateSupervisorAccess(Internship internship, Long supervisorUserId) {
+        InternshipSupervisor internshipSupervisor = internship.getSupervisor();
+        if (internshipSupervisor == null) {
+            throw new ValidationException("No supervisor assigned to this internship.");
         }
-        if (token.isVerified()) {
-            throw new ValidationException("This application has already been processed.");
+        User supervisorUser = userRepository.findById(supervisorUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supervisor user not found."));
+        if (supervisorUser.getRole() != Role.SUPERVISOR) {
+            throw new ValidationException("Only supervisors can approve or reject internship applications.");
         }
-        if (!token.canAttempt()) {
-            throw new ValidationException("Maximum verification attempts exceeded.");
+        if (!StringUtils.hasText(supervisorUser.getEmail()) || !StringUtils.hasText(internshipSupervisor.getCompanyEmail())) {
+            throw new ValidationException("Supervisor email could not be validated.");
         }
-        if (!token.getVerificationCode().equals(verificationCode)) {
-            token.setAttemptCount(token.getAttemptCount() + 1);
-            supervisorTokenRepository.save(token);
-            throw new ValidationException("Invalid verification code. Remaining attempts: " + (5 - token.getAttemptCount()));
+        if (!supervisorUser.getEmail().equalsIgnoreCase(internshipSupervisor.getCompanyEmail())) {
+            throw new ValidationException("You are not authorized to process this internship.");
+        }
+        if (internship.getStatus() != InternshipStatus.PENDING_COMPANY_APPROVAL) {
+            throw new ValidationException("This internship is not waiting for company approval.");
         }
     }
 

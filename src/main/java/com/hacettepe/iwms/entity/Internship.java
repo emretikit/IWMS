@@ -10,7 +10,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "internship")
@@ -80,9 +79,6 @@ public class Internship {
 
     @OneToOne(mappedBy = "internship", cascade = CascadeType.ALL)
     private CoordinatorEvaluation evaluation;
-
-    @OneToMany(mappedBy = "internship", cascade = CascadeType.ALL)
-    private List<SupervisorToken> tokens;
 
     // Helper methods
     public boolean isAbsenceCompliant() {

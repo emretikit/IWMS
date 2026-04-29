@@ -50,7 +50,6 @@ public class SecurityConfig {
                 // Permit ALL public endpoints at the very top to ensure precedence
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/companies/register").permitAll()
-                .requestMatchers("/api/internships/token/**").permitAll() // Simplified and moved up for all methods
                 .requestMatchers("/api/files/**").permitAll() // Also a public endpoint for file serving
 
                 // Catch-all for any other request (method security handles specific roles)
