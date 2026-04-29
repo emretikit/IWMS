@@ -55,6 +55,8 @@ public class AuthService {
 
     @Transactional
     public void register(RegisterRequest request) {
+        InternshipSupervisor matchedSupervisor = null;
+
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new ValidationException("Username is already taken!");
         }
@@ -73,9 +75,9 @@ public class AuthService {
             }
         }
         if (request.getRole() == Role.SUPERVISOR) {
-            InternshipSupervisor supervisor = internshipSupervisorRepository.findByCompanyEmailIgnoreCase(request.getEmail())
+            matchedSupervisor = internshipSupervisorRepository.findByCompanyEmailIgnoreCase(request.getEmail())
                     .orElseThrow(() -> new ValidationException("Supervisor signup is only allowed with a company-registered supervisor email."));
-            if (supervisor.getCompany() == null || supervisor.getCompany().getApprovalStatus() != ApprovalStatus.APPROVED) {
+            if (matchedSupervisor.getCompany() == null || matchedSupervisor.getCompany().getApprovalStatus() != ApprovalStatus.APPROVED) {
                 throw new ValidationException("Supervisor can sign up only after the related company is approved.");
             }
         }
@@ -98,6 +100,16 @@ public class AuthService {
             student.setStudentNumber("STU-" + UUID.randomUUID().toString().substring(0, 8));
             student.setCurrentYear(request.getYear());
             studentRepository.save(student);
+        }
+
+        if (request.getRole() == Role.SUPERVISOR && matchedSupervisor != null) {
+            matchedSupervisor.setFirstName(request.getName());
+            matchedSupervisor.setLastName(request.getSurname());
+            matchedSupervisor.setTitle(request.getTitle());
+            if (request.getEngineerType() != null) {
+                matchedSupervisor.setEngineerType(request.getEngineerType());
+            }
+            internshipSupervisorRepository.save(matchedSupervisor);
         }
     }
 

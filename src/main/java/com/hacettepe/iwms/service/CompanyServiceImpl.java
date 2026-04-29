@@ -43,7 +43,7 @@ public class CompanyServiceImpl implements ICompanyService {
         supervisor.setLastName(req.getSupervisorLastName());
         supervisor.setTitle(req.getSupervisorTitle());
         supervisor.setCompanyEmail(req.getSupervisorEmail());
-        supervisor.setEngineerType(req.getEngineerType());
+        supervisor.setEngineerType(req.getEngineerType() != null ? req.getEngineerType() : EngineerType.OTHER);
         supervisorRepository.save(supervisor);
         
         auditService.log(null, "COMPANY_REGISTER", "COMPANY", savedCompany.getId(), "New company registered and pending approval.");
