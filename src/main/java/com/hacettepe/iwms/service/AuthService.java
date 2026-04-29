@@ -6,12 +6,15 @@ import com.hacettepe.iwms.dto.AuthRequest;
 import com.hacettepe.iwms.dto.AuthResponse;
 import com.hacettepe.iwms.dto.PasswordUpdateRequest;
 import com.hacettepe.iwms.dto.RegisterRequest;
+import com.hacettepe.iwms.entity.ApprovalStatus;
+import com.hacettepe.iwms.entity.InternshipSupervisor;
 import com.hacettepe.iwms.entity.PasswordResetToken;
 import com.hacettepe.iwms.entity.Role;
 import com.hacettepe.iwms.entity.Student;
 import com.hacettepe.iwms.entity.User;
 import com.hacettepe.iwms.exception.ResourceNotFoundException;
 import com.hacettepe.iwms.exception.ValidationException;
+import com.hacettepe.iwms.repository.InternshipSupervisorRepository;
 import com.hacettepe.iwms.repository.PasswordResetTokenRepository;
 import com.hacettepe.iwms.repository.StudentRepository;
 import com.hacettepe.iwms.repository.UserRepository;
@@ -44,6 +47,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final UserDetailsServiceImpl userDetailsService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final InternshipSupervisorRepository internshipSupervisorRepository;
     private final AuditService auditService;
 
     @Value("${app.student-email-domain:cs.hacettepe.edu.tr}")
@@ -66,6 +70,13 @@ public class AuthService {
             }
             if ("1".equals(request.getYear())) {
                 throw new ValidationException("First-year students are not eligible for an internship.");
+            }
+        }
+        if (request.getRole() == Role.SUPERVISOR) {
+            InternshipSupervisor supervisor = internshipSupervisorRepository.findByCompanyEmailIgnoreCase(request.getEmail())
+                    .orElseThrow(() -> new ValidationException("Supervisor signup is only allowed with a company-registered supervisor email."));
+            if (supervisor.getCompany() == null || supervisor.getCompany().getApprovalStatus() != ApprovalStatus.APPROVED) {
+                throw new ValidationException("Supervisor can sign up only after the related company is approved.");
             }
         }
 
