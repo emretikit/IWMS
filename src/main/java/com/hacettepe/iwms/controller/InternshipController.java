@@ -76,21 +76,19 @@ public class InternshipController {
         return ResponseEntity.ok(new ApiResponse<>(true, "Student internships retrieved successfully.", internships));
     }
 
-    @GetMapping("/token/{token}")
-    public ResponseEntity<ApiResponse<InternshipResponseDto>> getInternshipByToken(@PathVariable String token) {
-        InternshipResponseDto internship = internshipService.getInternshipByToken(token);
-        return ResponseEntity.ok(new ApiResponse<>(true, "Internship data retrieved successfully.", internship));
-    }
-
-    @PutMapping("/token/{token}/approve")
-    public ResponseEntity<ApiResponse<InternshipResponseDto>> approveByToken(@PathVariable String token, @RequestParam String code) {
-        InternshipResponseDto responseDto = internshipService.approveByToken(token, code);
+    @PutMapping("/{internshipId}/approve")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<ApiResponse<InternshipResponseDto>> approveBySupervisor(@PathVariable Long internshipId,
+                                                                                   @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InternshipResponseDto responseDto = internshipService.approveBySupervisor(internshipId, currentUser.getId());
         return ResponseEntity.ok(new ApiResponse<>(true, "Internship approved successfully.", responseDto));
     }
 
-    @PutMapping("/token/{token}/reject")
-    public ResponseEntity<ApiResponse<InternshipResponseDto>> rejectByToken(@PathVariable String token, @RequestParam String code) {
-        InternshipResponseDto responseDto = internshipService.rejectByToken(token, code);
+    @PutMapping("/{internshipId}/reject")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<ApiResponse<InternshipResponseDto>> rejectBySupervisor(@PathVariable Long internshipId,
+                                                                                  @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InternshipResponseDto responseDto = internshipService.rejectBySupervisor(internshipId, currentUser.getId());
         return ResponseEntity.ok(new ApiResponse<>(true, "Internship rejected successfully.", responseDto));
     }
     
