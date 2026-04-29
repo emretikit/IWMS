@@ -908,48 +908,103 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
 }
 
 export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [panelError, setPanelError] = useState('');
+  const [panelSuccess, setPanelSuccess] = useState('');
+
+  async function loadSupervisorInternships() {
+    const response = await apiCall('/api/internships/supervisor', 'GET', session.token);
+    setInternships(response?.data ?? []);
+    setPanelError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadSupervisorInternships().catch((error) => {
+      setPanelError(error instanceof Error ? error.message : 'Supervisor internships could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function handleDecision(internshipId: number, action: 'approve' | 'reject') {
+    setPanelError('');
+    setPanelSuccess('');
+
+    const response = await apiCall(`/api/internships/${internshipId}/${action}`, 'PUT', session.token);
+    await loadSupervisorInternships();
+    setPanelSuccess(`Internship #${internshipId} ${action === 'approve' ? 'approved' : 'rejected'} successfully.`);
+    return response;
+  }
+
+  const pendingInternships = internships.filter((internship) => internship.status === 'PENDING_COORDINATOR_REVIEW');
+
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="supervisor"
-        eyebrow="Supervisor evaluation desk"
-        title="Review performance with a calmer, more executive evaluation surface."
-        body="Supervisors get a focused environment for internship outcome reporting, report assessment and signature-aware documentation."
-      />
+      <section className="form-card supervisor-review-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Supervisor review</p>
+            <h3>Student reports for your company</h3>
+            <p className="meta">Only students who selected your company and submitted a report are listed here.</p>
+            {panelError ? <p className="auth-error left-align">{panelError}</p> : null}
+            {panelSuccess ? <p className="success-note">{panelSuccess}</p> : null}
+          </div>
+          <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Supervisor internships refreshed', loadSupervisorInternships)}>
+            Refresh list
+          </button>
+        </div>
 
-      <MetricsRow
-        items={[
-          { label: 'Evaluation stage', value: 'Open', detail: 'Ready for document-backed company review submission.' },
-          { label: 'Report quality', value: 'Manual', detail: 'Narrative review remains under supervisor judgment.' },
-          { label: 'Signature path', value: 'Prepared', detail: 'Signature file metadata is included in the sample payload.' },
-        ]}
-      />
+        <div className="detail-stack supervisor-review-summary">
+          <p><strong>Total reports:</strong> {internships.length}</p>
+          <p><strong>Waiting for decision:</strong> {pendingInternships.length}</p>
+        </div>
 
-      <ActionGrid>
-        <ActionCard
-          title="Submit company evaluation"
-          body="Send the supervisor evaluation payload, including result notes and signature file metadata."
-          actionLabel="Submit evaluation"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Company evaluation submitted', () =>
-              apiCall('/api/company-evaluations/1', 'POST', session.token, {
-                internshipResultDocument: 'Result details',
-                reportEvaluationDocument: 'Evaluation details',
-                signatureFilePath: '/tmp/signature.png',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Review posture"
-          items={[
-            'Tie comments to real deliverables and observed workplace output.',
-            'Use concise language that supports coordinator decisions later.',
-            'Capture signature artifacts consistently for audit readiness.',
-          ]}
-        />
-      </ActionGrid>
+        <div className="application-list">
+          {internships.length === 0 ? (
+            <p className="meta">There is no report assigned to your company yet.</p>
+          ) : (
+            internships.map((internship) => {
+              const pending = internship.status === 'PENDING_COORDINATOR_REVIEW';
+
+              return (
+                <article key={internship.id} className="application-item">
+                  <div className="application-item-head">
+                    <div>
+                      <h4>{internship.studentName}</h4>
+                      <p className="meta">#{internship.id} - {internship.companyName}</p>
+                    </div>
+                    <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                  </div>
+
+                  <div className="application-item-body">
+                    <p><strong>Dates:</strong> {internship.startDate} - {internship.endDate}</p>
+                    <p><strong>Working days:</strong> {internship.totalWorkingDays}</p>
+                    <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                  </div>
+
+                  {pending ? (
+                    <div className="request-actions">
+                      <button
+                        className="primary-button"
+                        disabled={loading}
+                        onClick={() => void runRequest('Internship approved by supervisor', () => handleDecision(internship.id, 'approve'))}
+                      >
+                        {loading ? 'Processing...' : 'Approve'}
+                      </button>
+                      <button
+                        className="ghost-button danger-button"
+                        disabled={loading}
+                        onClick={() => void runRequest('Internship rejected by supervisor', () => handleDecision(internship.id, 'reject'))}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
     </div>
   );
 }

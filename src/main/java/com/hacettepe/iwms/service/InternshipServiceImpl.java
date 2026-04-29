@@ -185,6 +185,24 @@ public class InternshipServiceImpl implements IInternshipService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<InternshipResponseDto> getSupervisorInternships(Long supervisorUserId) {
+        User supervisorUser = userRepository.findById(supervisorUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supervisor user not found."));
+        if (supervisorUser.getRole() != Role.SUPERVISOR) {
+            throw new ValidationException("Only supervisors can access this list.");
+        }
+        if (!StringUtils.hasText(supervisorUser.getEmail())) {
+            throw new ValidationException("Supervisor email could not be validated.");
+        }
+
+        List<Internship> internships = internshipRepository.findBySupervisorCompanyEmailIgnoreCase(supervisorUser.getEmail()).stream()
+                .filter(internship -> internship.getReport() != null)
+                .toList();
+        return internshipMapper.toDtoList(internships);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public InternshipResponseDto getInternshipById(Long internshipId) {
         Internship internship = internshipRepository.findById(internshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
@@ -207,8 +225,11 @@ public class InternshipServiceImpl implements IInternshipService {
         if (!supervisorUser.getEmail().equalsIgnoreCase(internshipSupervisor.getCompanyEmail())) {
             throw new ValidationException("You are not authorized to process this internship.");
         }
-        if (internship.getStatus() != InternshipStatus.PENDING_COMPANY_APPROVAL) {
-            throw new ValidationException("This internship is not waiting for company approval.");
+        if (internship.getReport() == null) {
+            throw new ValidationException("This internship report has not been submitted yet.");
+        }
+        if (internship.getStatus() != InternshipStatus.PENDING_COORDINATOR_REVIEW) {
+            throw new ValidationException("This internship is not waiting for supervisor decision.");
         }
     }
 

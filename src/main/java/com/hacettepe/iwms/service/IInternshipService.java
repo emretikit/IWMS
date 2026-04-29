@@ -14,6 +14,7 @@ public interface IInternshipService {
     InternshipResponseDto approveBySupervisor(Long internshipId, Long supervisorUserId);
     InternshipResponseDto rejectBySupervisor(Long internshipId, Long supervisorUserId);
     List<InternshipResponseDto> getStudentInternships(Long studentUserId);
+    List<InternshipResponseDto> getSupervisorInternships(Long supervisorUserId);
     InternshipResponseDto getInternshipById(Long internshipId);
     InternshipReportDto submitReport(Long internshipId, InternshipReportSubmitRequest request, MultipartFile file, Long studentUserId);
     InternshipReport saveReportDraft(Long internshipId, Long studentUserId, String templateContent);
