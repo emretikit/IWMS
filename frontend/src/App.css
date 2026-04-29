@@ -70,6 +70,11 @@
   animation: authFadeIn 900ms ease;
 }
 
+.auth-screen-centered {
+  justify-content: center;
+  padding: 32px 20px;
+}
+
 .auth-title {
   margin-bottom: 56px;
   text-align: center;
@@ -636,6 +641,40 @@ button:disabled {
 
 .company-register-card {
   width: min(100%, 560px);
+}
+
+.signup-card {
+  gap: 18px;
+}
+
+.signup-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.signup-chip {
+  border: 1px solid rgba(23, 32, 51, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.52);
+  color: rgba(23, 32, 51, 0.82);
+  box-shadow: none;
+}
+
+.signup-chip.active {
+  background: rgba(17, 23, 20, 0.92);
+  color: #ffffff;
+}
+
+.signup-hint {
+  margin: -2px 0 0;
+  color: rgba(23, 32, 51, 0.72);
+  font-size: 13px;
+  text-align: left;
+}
+
+.center-note {
+  text-align: center;
 }
 
 .two-column-grid {

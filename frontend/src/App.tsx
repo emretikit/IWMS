@@ -115,7 +115,7 @@ function App() {
       return <SupervisorApprovalPage token={supervisorToken} loading={loading} runRequest={runRequest} onBackHome={() => navigateTo('/')} />;
     }
 
-    if (activePanel === 'company-register' || pathname === '/company/register') {
+    if (activePanel === 'signup' || pathname === '/signup' || pathname === '/company/register') {
       return (
         <CompanyRegistrationPanel
           loading={loading}
@@ -137,8 +137,8 @@ function App() {
           navigateTo('/');
         }}
         onNavigateCompanyRegister={() => {
-          setActivePanel('company-register');
-          navigateTo('/company/register');
+          setActivePanel('signup');
+          navigateTo('/signup');
         }}
       />
     );

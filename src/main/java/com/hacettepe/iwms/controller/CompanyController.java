@@ -39,7 +39,6 @@ public class CompanyController {
     }
 
     @GetMapping("/approved")
-    @PreAuthorize("hasAnyRole('STUDENT', 'COORDINATOR', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<CompanyResponseDto>>> getApprovedCompanies() {
         List<CompanyResponseDto> companies = companyService.getApprovedCompanies();
         return ResponseEntity.ok(new ApiResponse<>(true, "Approved companies retrieved successfully.", companies));

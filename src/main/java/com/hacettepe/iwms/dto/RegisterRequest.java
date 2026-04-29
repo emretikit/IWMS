@@ -1,5 +1,6 @@
 package com.hacettepe.iwms.dto;
 
+import com.hacettepe.iwms.entity.EngineerType;
 import com.hacettepe.iwms.entity.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -26,6 +27,8 @@ public class RegisterRequest {
 
     private String name;
     private String surname;
+    private String title;
+    private EngineerType engineerType;
 
     // Öğrenci rolü için sınıf bilgisi
     private String year;

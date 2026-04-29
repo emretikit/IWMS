@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { apiCall } from '../../services/api';
 import loginImage from '../../assets/login.png';
@@ -16,6 +16,15 @@ type CompanyRegistrationProps = {
   loading: boolean;
   runRequest: ApiRunner;
   onBack: () => void;
+};
+
+type ApprovedCompany = {
+  id: number;
+  name: string;
+  address: string;
+  supervisors?: Array<{
+    companyEmail: string;
+  }>;
 };
 
 export default function AuthPanel({ loading, runRequest, onSession, onNavigateCompanyRegister }: Props) {
@@ -103,7 +112,7 @@ export default function AuthPanel({ loading, runRequest, onSession, onNavigateCo
             </button>
 
             <button type="button" disabled={loading} className="ghost-button" onClick={onNavigateCompanyRegister}>
-              Register Company
+              Sign up
             </button>
 
             {loginError ? <p className="auth-error">{loginError}</p> : null}
@@ -115,26 +124,58 @@ export default function AuthPanel({ loading, runRequest, onSession, onNavigateCo
 }
 
 export function CompanyRegistrationPanel({ loading, runRequest, onBack }: CompanyRegistrationProps) {
+  const [mode, setMode] = useState<'company' | 'supervisor'>('company');
+  const [approvedCompanies, setApprovedCompanies] = useState<ApprovedCompany[]>([]);
+  const [approvedError, setApprovedError] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
-  const [engineerType, setEngineerType] = useState('COMPUTER');
-  const [supervisorFirstName, setSupervisorFirstName] = useState('');
-  const [supervisorLastName, setSupervisorLastName] = useState('');
-  const [supervisorTitle, setSupervisorTitle] = useState('');
   const [supervisorEmail, setSupervisorEmail] = useState('');
+  const [companySuccess, setCompanySuccess] = useState('');
+  const [companyError, setCompanyError] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [signupUsername, setSignupUsername] = useState('');
+  const [signupName, setSignupName] = useState('');
+  const [signupSurname, setSignupSurname] = useState('');
+  const [signupTitle, setSignupTitle] = useState('');
+  const [signupEngineerType, setSignupEngineerType] = useState('COMPUTER');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [supervisorError, setSupervisorError] = useState('');
+  const [supervisorSuccess, setSupervisorSuccess] = useState('');
   const backgroundStyle = { '--auth-forest-image': `url(${loginImage})` } as CSSProperties;
 
-  async function onSubmit(e: FormEvent) {
+  useEffect(() => {
+    void loadApprovedCompanies();
+  }, []);
+
+  async function loadApprovedCompanies() {
+    try {
+      const response = await apiCall('/api/companies/approved', 'GET');
+      const companies = response?.data ?? [];
+      setApprovedCompanies(companies);
+      setSelectedCompanyId((current) => current || (companies[0] ? String(companies[0].id) : ''));
+      setApprovedError('');
+      return response;
+    } catch (error) {
+      setApprovedError(error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  }
+
+  const selectedCompany = approvedCompanies.find((company) => String(company.id) === selectedCompanyId);
+  const selectedCompanyEmail = selectedCompany?.supervisors?.[0]?.companyEmail?.trim().toLowerCase() ?? '';
+  const normalizedSignupEmail = signupEmail.trim().toLowerCase();
+  const emailMismatch = mode === 'supervisor' && !!selectedCompanyId && !!normalizedSignupEmail && normalizedSignupEmail !== selectedCompanyEmail;
+
+  async function onCompanySubmit(e: FormEvent) {
     e.preventDefault();
+    setCompanyError('');
+    setCompanySuccess('');
 
     const success = await runRequest('Company registration submitted', () =>
       apiCall('/api/companies/register', 'POST', undefined, {
         name: companyName,
         address,
-        engineerType,
-        supervisorFirstName,
-        supervisorLastName,
-        supervisorTitle,
         supervisorEmail,
       }),
     );
@@ -142,78 +183,181 @@ export function CompanyRegistrationPanel({ loading, runRequest, onBack }: Compan
     if (success) {
       setCompanyName('');
       setAddress('');
-      setEngineerType('COMPUTER');
-      setSupervisorFirstName('');
-      setSupervisorLastName('');
-      setSupervisorTitle('');
       setSupervisorEmail('');
+      setCompanySuccess('Company signup submitted.');
+    } else {
+      setCompanyError('Company signup failed.');
+    }
+  }
+
+  async function onSupervisorSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSupervisorError('');
+    setSupervisorSuccess('');
+
+    if (!selectedCompanyId) {
+      setSupervisorError('Please select a company.');
+      return;
+    }
+
+    if (!selectedCompanyEmail) {
+      setSupervisorError('Selected company does not have a supervisor email.');
+      return;
+    }
+
+    if (emailMismatch) {
+      setSupervisorError('Email must exactly match the supervisor email registered by the company.');
+      return;
+    }
+
+    const success = await runRequest('Supervisor signup completed', () =>
+      apiCall('/api/auth/register', 'POST', undefined, {
+        username: signupUsername,
+        email: signupEmail,
+        password: signupPassword,
+        role: 'SUPERVISOR',
+        name: signupName,
+        surname: signupSurname,
+        title: signupTitle,
+        engineerType: signupEngineerType,
+      }),
+    );
+
+    if (success) {
+      setSignupUsername('');
+      setSignupName('');
+      setSignupSurname('');
+      setSignupTitle('');
+      setSignupEngineerType('COMPUTER');
+      setSignupEmail('');
+      setSignupPassword('');
+      setSupervisorSuccess('Supervisor account created.');
+    } else {
+      setSupervisorError('Supervisor signup failed.');
     }
   }
 
   return (
     <section className="auth-screen" style={backgroundStyle}>
-      <div className="auth-screen-inner">
+      <div className="auth-screen-inner auth-screen-centered">
         <header className="auth-title">
-          <h1>Company registration</h1>
+          <h1>Sign up</h1>
         </header>
 
-        <div className="login-card minimal company-register-card">
-          <form onSubmit={onSubmit} className="grid auth-form">
-            <label className="field">
-              <span>Company name</span>
-              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Enter company name" required />
-            </label>
+        <div className="login-card minimal company-register-card signup-card">
+          <div className="signup-switcher">
+            <button type="button" className={mode === 'company' ? 'signup-chip active' : 'signup-chip'} onClick={() => setMode('company')}>
+              Company
+            </button>
+            <button type="button" className={mode === 'supervisor' ? 'signup-chip active' : 'signup-chip'} onClick={() => setMode('supervisor')}>
+              Supervisor
+            </button>
+          </div>
 
-            <label className="field">
-              <span>Address</span>
-              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter company address" required />
-            </label>
-
-            <label className="field">
-              <span>Engineer type</span>
-              <select value={engineerType} onChange={(e) => setEngineerType(e.target.value)}>
-                <option value="COMPUTER">Computer Engineer</option>
-                <option value="ELECTRICAL_ELECTRONIC">Electrical-Electronic Engineer</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </label>
-
-            <div className="two-column-grid">
+          {mode === 'company' ? (
+            <form onSubmit={onCompanySubmit} className="grid auth-form">
               <label className="field">
-                <span>Supervisor first name</span>
-                <input value={supervisorFirstName} onChange={(e) => setSupervisorFirstName(e.target.value)} placeholder="First name" required />
+                <span>Company name</span>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Enter company name" required />
               </label>
 
               <label className="field">
-                <span>Supervisor last name</span>
-                <input value={supervisorLastName} onChange={(e) => setSupervisorLastName(e.target.value)} placeholder="Last name" required />
+                <span>Address</span>
+                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter company address" required />
               </label>
-            </div>
 
-            <label className="field">
-              <span>Supervisor title</span>
-              <input value={supervisorTitle} onChange={(e) => setSupervisorTitle(e.target.value)} placeholder="Job title" required />
-            </label>
+              <label className="field">
+                <span>Supervisor email</span>
+                <input
+                  value={supervisorEmail}
+                  onChange={(e) => setSupervisorEmail(e.target.value)}
+                  type="email"
+                  placeholder="name@company.com"
+                  required
+                />
+              </label>
 
-            <label className="field">
-              <span>Supervisor email</span>
-              <input
-                value={supervisorEmail}
-                onChange={(e) => setSupervisorEmail(e.target.value)}
-                type="email"
-                placeholder="name@company.com"
-                required
-              />
-            </label>
+              {companyError ? <p className="auth-error">{companyError}</p> : null}
+              {companySuccess ? <p className="success-note center-note">{companySuccess}</p> : null}
 
-            <button disabled={loading} className="primary-button login-submit">
-              {loading ? 'Submitting...' : 'Submit company request'}
-            </button>
+              <button disabled={loading} className="primary-button login-submit">
+                {loading ? 'Submitting...' : 'Create company'}
+              </button>
 
-            <button type="button" disabled={loading} className="ghost-button" onClick={onBack}>
-              Back to login
-            </button>
-          </form>
+              <button type="button" disabled={loading} className="ghost-button" onClick={onBack}>
+                Back to login
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={onSupervisorSubmit} className="grid auth-form">
+              <label className="field">
+                <span>Approved company</span>
+                <select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value)} disabled={!approvedCompanies.length}>
+                  {approvedCompanies.length === 0 ? <option value="">No approved company</option> : null}
+                  {approvedCompanies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="two-column-grid">
+                <label className="field">
+                  <span>First name</span>
+                  <input value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="First name" required />
+                </label>
+
+                <label className="field">
+                  <span>Last name</span>
+                  <input value={signupSurname} onChange={(e) => setSignupSurname(e.target.value)} placeholder="Last name" required />
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Username</span>
+                <input value={signupUsername} onChange={(e) => setSignupUsername(e.target.value)} placeholder="Username" required />
+              </label>
+
+              <label className="field">
+                <span>Title</span>
+                <input value={signupTitle} onChange={(e) => setSignupTitle(e.target.value)} placeholder="Supervisor title" required />
+              </label>
+
+              <label className="field">
+                <span>Engineer type</span>
+                <select value={signupEngineerType} onChange={(e) => setSignupEngineerType(e.target.value)}>
+                  <option value="COMPUTER">Computer Engineer</option>
+                  <option value="ELECTRICAL_ELECTRONIC">Electrical-Electronic Engineer</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Email</span>
+                <input value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} type="email" placeholder="Supervisor email" required />
+              </label>
+
+              {selectedCompanyEmail ? <p className="signup-hint">Registered company email: {selectedCompanyEmail}</p> : null}
+              {approvedError ? <p className="auth-error">{approvedError}</p> : null}
+              {emailMismatch ? <p className="auth-error">Email must exactly match the company email.</p> : null}
+              {supervisorError ? <p className="auth-error">{supervisorError}</p> : null}
+              {supervisorSuccess ? <p className="success-note center-note">{supervisorSuccess}</p> : null}
+
+              <label className="field">
+                <span>Password</span>
+                <input value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} type="password" placeholder="Password" required />
+              </label>
+
+              <button disabled={loading || emailMismatch || !selectedCompanyId} className="primary-button login-submit">
+                {loading ? 'Creating...' : 'Create supervisor'}
+              </button>
+
+              <button type="button" disabled={loading} className="ghost-button" onClick={onBack}>
+                Back to login
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </section>
