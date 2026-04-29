@@ -13,7 +13,16 @@ export async function apiCall(path: string, method: ApiMethod, token?: string, b
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.message ?? 'Request failed');
+    let errorMessage = data?.message ?? 'Request failed';
+    if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+      const fieldErrors = Object.entries(data.data)
+        .map(([field, error]) => `${field}: ${error}`)
+        .join(', ');
+      if (fieldErrors) {
+        errorMessage += ` (${fieldErrors})`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   return data;
 }
@@ -28,7 +37,16 @@ export async function multipartApiCall(path: string, method: ApiMethod, formData
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.message ?? 'Request failed');
+    let errorMessage = data?.message ?? 'Request failed';
+    if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+      const fieldErrors = Object.entries(data.data)
+        .map(([field, error]) => `${field}: ${error}`)
+        .join(', ');
+      if (fieldErrors) {
+        errorMessage += ` (${fieldErrors})`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   return data;
 }

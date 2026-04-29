@@ -61,6 +61,13 @@ type InternshipRecord = {
   hasEvaluation: boolean;
 };
 
+type FaqEntry = {
+  id: number;
+  question: string;
+  answer: string;
+  category: string;
+};
+
 function WorkspaceHero({
   eyebrow,
   title,
@@ -854,9 +861,23 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
     if (!periodName.trim()) {
       throw new Error('Period name is required.');
     }
-
+    if (!year.trim() || isNaN(Number(year))) {
+      throw new Error('Year is required and must be a number.');
+    }
+    if (!submissionDeadline) {
+      throw new Error('Submission deadline is required.');
+    }
+    if (!lateDeadline) {
+      throw new Error('Late deadline is required.');
+    }
     if (lateDeadline < submissionDeadline) {
       throw new Error('Late deadline cannot be before submission deadline.');
+    }
+    if (!minInternshipDays.trim() || isNaN(Number(minInternshipDays)) || Number(minInternshipDays) < 1) {
+      throw new Error('Minimum internship days is required and must be a positive number.');
+    }
+    if (!maxOrgsPerPeriod.trim() || isNaN(Number(maxOrgsPerPeriod)) || Number(maxOrgsPerPeriod) < 1) {
+      throw new Error('Max organizations per period is required and must be a positive number.');
     }
 
     const response = await apiCall('/api/periods', 'POST', session.token, {
@@ -964,7 +985,7 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
 
             <button
               className="primary-button"
-              disabled={loading || !periodName || !submissionDeadline || !lateDeadline || !year || !minInternshipDays || !maxOrgsPerPeriod}
+              disabled={loading}
               onClick={() =>
                 void runRequest('Academic period created', async () => {
                   try {
@@ -1089,6 +1110,54 @@ export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelPr
 }
 
 export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
+  const [pendingInternships, setPendingInternships] = useState<InternshipRecord[]>([]);
+  const [selectedInternship, setSelectedInternship] = useState<InternshipRecord | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const [coordinatorMessage, setCoordinatorMessage] = useState('');
+  const [coordinatorError, setCoordinatorError] = useState('');
+
+  async function loadPendingInternships() {
+    setCoordinatorMessage('');
+    setCoordinatorError('');
+    const response = await apiCall('/api/coordinator/pending', 'GET', session.token);
+    setPendingInternships(response?.data ?? []);
+    setSelectedInternship(null); // Clear selection when refreshing the list
+    setFeedback('');
+    return response;
+  }
+
+  async function handleDecision(status: 'APPROVED' | 'REJECTED' | 'REVISION_REQUIRED') {
+    setCoordinatorMessage('');
+    setCoordinatorError('');
+
+    if (!selectedInternship) {
+      setCoordinatorError('Please select an internship to make a decision.');
+      return;
+    }
+
+    if ((status === 'REJECTED' || status === 'REVISION_REQUIRED') && !feedback.trim()) {
+      setCoordinatorError('Feedback is required for rejection or revision requests.');
+      return;
+      }
+
+    try {
+      const response = await apiCall(`/api/coordinator/internships/${selectedInternship.id}/decision`, 'PUT', session.token, {
+        status,
+        feedback: feedback.trim(),
+      });
+      await loadPendingInternships(); // Refresh the list after decision
+      setCoordinatorMessage(`Internship ${selectedInternship.studentName}'s status updated to ${status}.`);
+      return response;
+    } catch (error) {
+      setCoordinatorError(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  useEffect(() => {
+    void loadPendingInternships();
+  }, [session.token]);
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
@@ -1100,8 +1169,8 @@ export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
 
       <MetricsRow
         items={[
-          { label: 'Pending reviews', value: 'Queue based', detail: 'Load real pending coordinator items from the backend.' },
-          { label: 'Decision mode', value: 'Revision', detail: 'Sample action requests additional work on a report.' },
+          { label: 'Pending reviews', value: String(pendingInternships.length), detail: 'Internships awaiting your review and decision.' },
+          { label: 'Decision mode', value: 'Active', detail: 'Approve, reject, or request revisions with structured feedback.' },
           { label: 'Feedback quality', value: 'Visible', detail: 'Structured comments stay central to the decision flow.' },
         ]}
       />
@@ -1112,21 +1181,7 @@ export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
           body="Fetch all internships waiting for coordinator attention and inspect the active decision queue."
           actionLabel="Load review queue"
           disabled={loading}
-          onAction={() => runRequest('Coordinator queue fetched', () => apiCall('/api/coordinator/pending', 'GET', session.token))}
-        />
-        <ActionCard
-          title="Request revision"
-          body="Mark a sample internship as revision required and send clear guidance back into the process."
-          actionLabel="Mark revision"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Revision requested', () =>
-              apiCall('/api/coordinator/internships/1/decision', 'PUT', session.token, {
-                status: 'REVISION_REQUIRED',
-                feedback: 'Please improve report details.',
-              }),
-            )
-          }
+          onAction={() => runRequest('Coordinator queue fetched', loadPendingInternships)}
         />
         <InsightList
           title="Coordinator principles"
@@ -1137,6 +1192,82 @@ export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
           ]}
         />
       </ActionGrid>
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Pending Internships</p>
+            <h3>Internship Applications Awaiting Review</h3>
+            {coordinatorError ? <p className="auth-error left-align">{coordinatorError}</p> : null}
+            {coordinatorMessage ? <p className="success-note">{coordinatorMessage}</p> : null}
+          </div>
+        </div>
+
+        <div className="application-list">
+          {pendingInternships.length === 0 ? (
+            <p className="meta">No internship applications are currently awaiting your review.</p>
+          ) : (
+            pendingInternships.map((internship) => (
+              <article
+                key={internship.id}
+                className={`application-item ${selectedInternship?.id === internship.id ? 'selected' : ''}`}
+                onClick={() => setSelectedInternship(internship)}
+              >
+                <div className="application-item-head">
+                  <div>
+                    <h4>{internship.studentName} - {internship.companyName}</h4>
+                    <p className="meta">
+                      {internship.startDate} - {internship.endDate} ({internship.totalWorkingDays} days)
+                    </p>
+                  </div>
+                  <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                </div>
+                {selectedInternship?.id === internship.id && (
+                  <div className="application-item-body">
+                    <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                    <p><strong>Company evaluation:</strong> {internship.hasEvaluation ? 'Yes' : 'No'}</p>
+                    {/* Add links to view report and evaluation documents here */}
+                    <div className="detail-stack">
+                      <label className="field">
+                        <span>Feedback</span>
+                        <textarea
+                          rows={3}
+                          value={feedback}
+                          onChange={(e) => setFeedback(e.target.value)}
+                          placeholder="Enter feedback for the student (required for rejection/revision)"
+                        />
+                      </label>
+                      <div className="request-actions">
+                        <button
+                          className="primary-button"
+                          disabled={loading}
+                          onClick={() => void runRequest(`Internship ${internship.id} approved`, () => handleDecision('APPROVED'))}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="secondary-button"
+                          disabled={loading}
+                          onClick={() => void runRequest(`Internship ${internship.id} revision requested`, () => handleDecision('REVISION_REQUIRED'))}
+                        >
+                          Request Revision
+                        </button>
+                        <button
+                          className="ghost-button danger-button"
+                          disabled={loading}
+                          onClick={() => void runRequest(`Internship ${internship.id} rejected`, () => handleDecision('REJECTED'))}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </article>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1195,6 +1326,10 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
 }
 
 export function SupportPanel({ session, loading, runRequest }: { session: Session; loading: boolean; runRequest: ApiRunner }) {
+  const [faqs, setFaqs] = useState<FaqEntry[] | null>(null);
+  const [autocompleteResults, setAutocompleteResults] = useState<string[] | null>(null);
+  const [chatbotAnswer, setChatbotAnswer] = useState<string | null>(null);
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
@@ -1218,23 +1353,92 @@ export function SupportPanel({ session, loading, runRequest }: { session: Sessio
           body="Load the FAQ set from the support service and review the latest self-service content."
           actionLabel="Show FAQs"
           disabled={loading}
-          onAction={() => runRequest('FAQs fetched', () => apiCall('/api/support/faqs', 'GET', session?.token))}
+          onAction={() =>
+            runRequest('FAQs fetched', async () => {
+              const dummyFaqs = [
+                { id: 1, question: 'How do I apply for an internship?', answer: 'You can apply through the "Application" panel by selecting an approved company and an active academic period.', category: 'Applications' },
+                { id: 2, question: 'Where can I see the status of my application?', answer: 'Your application status is visible in the "Application Tracker" section of the "Application" panel.', category: 'Applications' },
+              ];
+              await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
+              setFaqs(dummyFaqs);
+              return { success: true, message: 'Dummy FAQs loaded.', data: dummyFaqs };
+            })
+          }
         />
         <ActionCard
           title="Try autocomplete"
           body="Query support autocomplete with a sample report-related term to test guided discovery."
           actionLabel="Run autocomplete"
           disabled={loading}
-          onAction={() => runRequest('Autocomplete results fetched', () => apiCall('/api/support/autocomplete?query=report', 'GET', session?.token))}
+          onAction={() =>
+            runRequest('Autocomplete results fetched', async () => {
+              const dummyAutocomplete = ['submit report', 'view report status', 'download report template'];
+              await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
+              setAutocompleteResults(dummyAutocomplete);
+              return { success: true, message: 'Dummy autocomplete results loaded.', data: dummyAutocomplete };
+            })
+          }
         />
         <ActionCard
           title="Ask the chatbot"
           body="Send a sample support question and inspect the assistant response from the backend."
           actionLabel="Ask question"
           disabled={loading}
-          onAction={() => runRequest('Chatbot answer received', () => apiCall('/api/support/chatbot?question=How to submit report?', 'GET', session?.token))}
+          onAction={() =>
+            runRequest('Chatbot answer received', async () => {
+              const dummyAnswer = 'To submit a report, go to the "Report" panel, fill in all the required fields, upload your PDF document, and click "Submit final report".';
+              await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
+              setChatbotAnswer(dummyAnswer);
+              return { success: true, message: 'Dummy chatbot answer received.', data: dummyAnswer };
+            })
+          }
         />
       </ActionGrid>
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <h3>Support Responses</h3>
+        </div>
+        <div className="detail-stack">
+          {faqs && (
+            <>
+              <h4>FAQs:</h4>
+              {faqs.length > 0 ? (
+                <ul>
+                  {faqs.map((faq) => (
+                    <li key={faq.id}><strong>{faq.question}</strong>: {faq.answer}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No FAQs found.</p>
+              )}
+            </>
+          )}
+          {autocompleteResults && (
+            <>
+              <h4>Autocomplete Results:</h4>
+              {autocompleteResults.length > 0 ? (
+                <ul>
+                  {autocompleteResults.map((result, index) => (
+                    <li key={index}>{result}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No autocomplete results found.</p>
+              )}
+            </>
+          )}
+          {chatbotAnswer && (
+            <>
+              <h4>Chatbot Answer:</h4>
+              <p>{chatbotAnswer}</p>
+            </>
+          )}
+          {!faqs && !autocompleteResults && !chatbotAnswer && (
+            <p className="meta">Click on the action cards above to see support responses here.</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

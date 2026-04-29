@@ -6,15 +6,10 @@ import com.hacettepe.iwms.dto.AuthRequest;
 import com.hacettepe.iwms.dto.AuthResponse;
 import com.hacettepe.iwms.dto.PasswordUpdateRequest;
 import com.hacettepe.iwms.dto.RegisterRequest;
-import com.hacettepe.iwms.entity.PasswordResetToken;
-import com.hacettepe.iwms.entity.Role;
-import com.hacettepe.iwms.entity.Student;
-import com.hacettepe.iwms.entity.User;
+import com.hacettepe.iwms.entity.*;
 import com.hacettepe.iwms.exception.ResourceNotFoundException;
 import com.hacettepe.iwms.exception.ValidationException;
-import com.hacettepe.iwms.repository.PasswordResetTokenRepository;
-import com.hacettepe.iwms.repository.StudentRepository;
-import com.hacettepe.iwms.repository.UserRepository;
+import com.hacettepe.iwms.repository.*;
 import com.hacettepe.iwms.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +34,9 @@ public class AuthService {
     
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final AcademicAdvisorRepository academicAdvisorRepository;
+    private final InternshipCoordinatorRepository internshipCoordinatorRepository;
+    private final InternshipSupervisorRepository internshipSupervisorRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -87,6 +85,21 @@ public class AuthService {
             student.setStudentNumber("STU-" + UUID.randomUUID().toString().substring(0, 8));
             student.setCurrentYear(request.getYear());
             studentRepository.save(student);
+        } else if (request.getRole() == Role.ACADEMIC_ADVISOR) {
+            AcademicAdvisor advisor = new AcademicAdvisor();
+            advisor.setUser(savedUser);
+            academicAdvisorRepository.save(advisor);
+        } else if (request.getRole() == Role.COORDINATOR) {
+            InternshipCoordinator coordinator = new InternshipCoordinator();
+            coordinator.setUser(savedUser);
+            internshipCoordinatorRepository.save(coordinator);
+        } else if (request.getRole() == Role.SUPERVISOR) {
+            InternshipSupervisor supervisor = new InternshipSupervisor();
+            supervisor.setUser(savedUser);
+            supervisor.setFirstName(savedUser.getName());
+            supervisor.setLastName(savedUser.getSurname());
+            supervisor.setCompanyEmail(savedUser.getEmail());
+            internshipSupervisorRepository.save(supervisor);
         }
     }
 

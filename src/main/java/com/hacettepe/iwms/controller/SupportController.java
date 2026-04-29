@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/support")
@@ -27,17 +28,17 @@ public class SupportController {
     }
 
     @GetMapping("/autocomplete")
-    public ResponseEntity<ApiResponse<List<FaqEntry>>> autocomplete(@RequestParam String query) {
-        return ResponseEntity.ok(new ApiResponse<>(true, "Autocomplete results.", faqEntryRepository.findByQuestionContainingIgnoreCase(query)));
+    public ResponseEntity<ApiResponse<List<String>>> autocomplete(@RequestParam String query) {
+        List<String> questions = faqEntryRepository.findByQuestionContainingIgnoreCase(query)
+                .stream()
+                .map(FaqEntry::getQuestion)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(new ApiResponse<>(true, "Autocomplete results.", questions));
     }
 
     @GetMapping("/chatbot")
     public ResponseEntity<ApiResponse<String>> chatbot(@RequestParam String question) {
-        // Find an exact match for the question, ignoring case.
-        Optional<FaqEntry> faqMatch = faqEntryRepository.findByQuestionContainingIgnoreCase(question)
-                .stream()
-                .filter(faq -> faq.getQuestion().equalsIgnoreCase(question))
-                .findFirst();
+        Optional<FaqEntry> faqMatch = faqEntryRepository.findByQuestionIgnoreCase(question);
 
         if (faqMatch.isPresent()) {
             return ResponseEntity.ok(new ApiResponse<>(true, "Chatbot response.", faqMatch.get().getAnswer()));

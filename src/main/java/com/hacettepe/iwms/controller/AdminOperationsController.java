@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -28,6 +29,22 @@ public class AdminOperationsController {
     private final AnnouncementRepository announcementRepository;
     private final FaqEntryRepository faqEntryRepository;
     private final AuditService auditService;
+
+    @GetMapping("/users")
+    public ResponseEntity<ApiResponse<List<UserDTO>>> getAllUsers() {
+        List<UserDTO> users = userRepository.findAll().stream().map(user -> {
+            UserDTO dto = new UserDTO();
+            dto.setId(user.getId());
+            dto.setFirstName(user.getFirstName());
+            dto.setLastName(user.getLastName());
+            dto.setUsername(user.getUsername());
+            dto.setEmail(user.getEmail());
+            dto.setRole(user.getRole().name());
+            dto.setActive(user.isActive());
+            return dto;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(new ApiResponse<>(true, "User list retrieved successfully.", users));
+    }
 
     @PutMapping("/users/{userId}/status")
     public ResponseEntity<ApiResponse<User>> updateUserStatus(@PathVariable Long userId,

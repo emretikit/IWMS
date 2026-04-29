@@ -1,7 +1,8 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import './App.css';
 import type { Role, Session } from './types';
-import AuthPanel, { CompanyRegistrationPanel } from './components/panels/AuthPanel';
+import AuthPanel, { CompanyRegistrationPanel, UserRegistrationPanel } from './components/panels/AuthPanel';
 import Sidebar from './components/layout/Sidebar';
 import ResultPanel from './components/layout/ResultPanel';
 import { getPanels } from './config/panels';
@@ -32,57 +33,38 @@ const defaultFeedback: ApiFeedback = {
   lastUpdated: 'just now',
 };
 
-function getDefaultPanel(role: Role) {
-  if (role === 'STUDENT') return 'application';
-  if (role === 'SUPERVISOR') return 'company-eval';
-  if (role === 'COORDINATOR') return 'coordinator';
-  return 'companies';
-}
-
-function getSupervisorTokenFromPath(pathname: string) {
-  const prefix = '/supervisor/token/';
-  if (!pathname.startsWith(prefix)) {
-    return null;
-  }
-
-  return decodeURIComponent(pathname.slice(prefix.length));
+function getDefaultPath(role: Role) {
+  if (role === 'STUDENT') return '/application';
+  if (role === 'SUPERVISOR') return '/company-eval';
+  if (role === 'COORDINATOR') return '/coordinator';
+  return '/companies';
 }
 
 function App() {
   const [session, setSession] = useState<Session>(null);
-  const [activePanel, setActivePanel] = useState('auth');
   const [feedback, setFeedback] = useState<ApiFeedback>(defaultFeedback);
   const [loading, setLoading] = useState(false);
-  const [pathname, setPathname] = useState(window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const panels = useMemo(() => getPanels(session), [session]);
-  const supervisorToken = useMemo(() => getSupervisorTokenFromPath(pathname), [pathname]);
-
-  function navigateTo(path: string) {
-    window.history.pushState({}, '', path);
-    setPathname(window.location.pathname);
-  }
-
-  useEffect(() => {
-    if (!session) {
-      setActivePanel('auth');
-      return;
+  const supervisorToken = useMemo(() => {
+    const prefix = '/supervisor/token/';
+    if (!location.pathname.startsWith(prefix)) {
+      return null;
     }
+    return decodeURIComponent(location.pathname.slice(prefix.length));
+  }, [location.pathname]);
 
-    setActivePanel(getDefaultPanel(session.role));
-  }, [session]);
-
+  // Oturum açıldığında veya URL değiştiğinde yönlendirmeyi yöneten useEffect
   useEffect(() => {
-    const onPopState = () => {
-      setPathname(window.location.pathname);
-    };
+    if (session && location.pathname === '/') {
+      navigate(getDefaultPath(session.role), { replace: true });
+    }
+  }, [session, location.pathname, navigate]);
 
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  async function runRequest(title: string, request: () => Promise<unknown>) {
+  async function runRequest(title: string, request: () => Promise<unknown>, onSuccess?: () => void) {
     setLoading(true);
     try {
       const data = await request();
@@ -94,11 +76,14 @@ function App() {
           lastUpdated: new Date().toLocaleTimeString(),
         });
       });
+      if (onSuccess) {
+        onSuccess();
+      }
       return true;
     } catch (error) {
       startTransition(() => {
         setFeedback({
-          title: 'Request failed',
+          title: 'Error: ' + title,
           body: error instanceof Error ? error.message : String(error),
           isError: true,
           lastUpdated: new Date().toLocaleTimeString(),
@@ -110,53 +95,37 @@ function App() {
     }
   }
 
+  const resultPanel = <ResultPanel result={feedback.body} title={feedback.title} isError={feedback.isError} lastUpdated={feedback.lastUpdated} />;
+
   if (!session) {
-    if (supervisorToken) {
-      return <SupervisorApprovalPage token={supervisorToken} loading={loading} runRequest={runRequest} onBackHome={() => navigateTo('/')} />;
-    }
-
-    if (activePanel === 'company-register' || pathname === '/company/register') {
-      return (
-        <CompanyRegistrationPanel
-          loading={loading}
-          runRequest={runRequest}
-          onBack={() => {
-            setActivePanel('auth');
-            navigateTo('/');
-          }}
-        />
-      );
-    }
-
     return (
-      <AuthPanel
-        loading={loading}
-        runRequest={runRequest}
-        onSession={(nextSession) => {
-          setSession(nextSession);
-          navigateTo('/');
-        }}
-        onNavigateCompanyRegister={() => {
-          setActivePanel('company-register');
-          navigateTo('/company/register');
-        }}
-      />
+      <div className="auth-layout">
+        <Routes>
+          <Route path="/supervisor/token/:token" element={<SupervisorApprovalPage token={supervisorToken} loading={loading} runRequest={runRequest} onBackHome={() => navigate('/')} />} />
+          <Route path="/company/register" element={<CompanyRegistrationPanel loading={loading} runRequest={runRequest} onBack={() => navigate('/')} />} />
+          <Route path="/register" element={<UserRegistrationPanel loading={loading} runRequest={runRequest} onBack={() => navigate('/')} />} />
+          <Route path="*" element={<AuthPanel loading={loading} runRequest={runRequest} onSession={setSession} onNavigateCompanyRegister={() => navigate('/company/register')} />} />
+        </Routes>
+        {resultPanel}
+      </div>
     );
   }
+
+  const activePanel = panels.find(p => p.key === location.pathname.substring(1))?.key || getDefaultPath(session.role).substring(1);
 
   return (
     <div className="layout">
       <Sidebar
         panels={panels}
         activePanel={activePanel}
-        onSelectPanel={setActivePanel}
+        onSelectPanel={(key) => navigate(`/${key}`)}
         isOpen={navOpen}
         onClose={() => setNavOpen(false)}
         onLogout={() => {
           setNavOpen(false);
           setSession(null);
           setFeedback(defaultFeedback);
-          navigateTo('/');
+          navigate('/');
         }}
       />
 
@@ -171,18 +140,21 @@ function App() {
         </div>
 
         <section className="main-shell">
-          {activePanel === 'application' && session && <ApplicationPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'report' && session && <ReportPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'periods' && session && <PeriodsPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'company-eval' && session && <CompanyEvaluationPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'coordinator' && session && <CoordinatorPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'admin-ops' && session && <AdminOpsPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'support' && <SupportPanel session={session} loading={loading} runRequest={runRequest} />}
-          {activePanel === 'history' && session && <HistoryPanel session={session} loading={loading} runRequest={runRequest} />}
+          <Routes>
+            <Route path="/application" element={<ApplicationPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/report" element={<ReportPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/companies" element={<CompaniesPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/periods" element={<PeriodsPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/company-eval" element={<CompanyEvaluationPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/coordinator" element={<CoordinatorPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/admin-ops" element={<AdminOpsPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/support" element={<SupportPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="/history" element={<HistoryPanel session={session} loading={loading} runRequest={runRequest} />} />
+            <Route path="*" element={<Navigate to={getDefaultPath(session.role)} replace />} />
+          </Routes>
         </section>
 
-        <ResultPanel result={feedback.body} title={feedback.title} isError={feedback.isError} lastUpdated={feedback.lastUpdated} />
+        {resultPanel}
       </main>
     </div>
   );
