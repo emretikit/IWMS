@@ -182,7 +182,9 @@ function App() {
           {activePanel === 'history' && session && <HistoryPanel session={session} loading={loading} runRequest={runRequest} />}
         </section>
 
-        <ResultPanel result={feedback.body} title={feedback.title} isError={feedback.isError} lastUpdated={feedback.lastUpdated} />
+        <div className="activity-feed-row">
+          <ResultPanel result={feedback.body} title={feedback.title} isError={feedback.isError} lastUpdated={feedback.lastUpdated} />
+        </div>
       </main>
     </div>
   );
