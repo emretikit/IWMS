@@ -279,28 +279,12 @@ export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
 
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="student"
-        eyebrow="Student cockpit"
-        title="Apply to an approved company, track the request, and stay aligned with the internship workflow."
-        body="This UC-004 workspace pulls approved companies, active academic periods and your live application history into one student-facing flow."
-      />
-
-      <MetricsRow
-        items={[
-          { label: 'Approved companies', value: String(approvedCompanies.length), detail: 'Only approved organizations can be selected for internship applications.' },
-          { label: 'Active periods', value: String(activePeriods.length), detail: 'Students can only submit against active academic periods.' },
-          { label: 'My applications', value: String(internships.length), detail: 'Track pending, approved and rejected applications from one place.' },
-        ]}
-      />
-
       <section className="data-grid two-up">
         <article className="form-card">
           <div className="form-card-header">
             <div>
               <p className="eyebrow">Application form</p>
               <h3>Submit internship application</h3>
-              <p className="meta">If the company list is empty, ask the admin to approve a company and create an active period first.</p>
               {dataWarning ? <p className="auth-error left-align">{dataWarning}</p> : null}
               {submitError ? <p className="auth-error left-align">{submitError}</p> : null}
               {submitMessage ? <p className="success-note">{submitMessage}</p> : null}
@@ -375,7 +359,7 @@ export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
         <article className="form-card">
           <p className="eyebrow">Selected company</p>
           <h3>{selectedCompany ? selectedCompany.name : 'Choose a company'}</h3>
-          <p className="meta">{selectedCompany ? selectedCompany.address : 'Pick an approved company to see supervisor information.'}</p>
+          <p className="meta">{selectedCompany ? selectedCompany.address : 'Select a company.'}</p>
 
           {selectedCompany?.supervisors?.[0] ? (
             <div className="detail-stack">
@@ -385,7 +369,7 @@ export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
               <p><strong>Engineer:</strong> {selectedCompany.supervisors[0].engineerType}</p>
             </div>
           ) : (
-            <p className="meta">Supervisor details will appear here when the selected company has a registered supervisor record.</p>
+            <p className="meta">Supervisor details will appear here.</p>
           )}
 
           <hr className="section-divider" />
@@ -450,14 +434,6 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
   const [reportFile, setReportFile] = useState<File | null>(null);
   const [reportError, setReportError] = useState('');
   const [reportSuccess, setReportSuccess] = useState('');
-  const [lastSubmissionMeta, setLastSubmissionMeta] = useState<{
-    id: number | null;
-    internshipId: number | null;
-    fileName: string;
-    submissionStatus: string;
-    submittedAt: string;
-  } | null>(null);
-
   async function loadStudentInternships() {
     const response = await apiCall('/api/internships/my', 'GET', session.token);
     const nextInternships = response?.data ?? [];
@@ -513,13 +489,6 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
     const response = await multipartApiCall(`/api/internships/${selectedInternshipId}/report`, 'POST', formData, session.token);
     await loadStudentInternships();
     setReportSuccess('Internship report submitted successfully.');
-    setLastSubmissionMeta({
-      id: response?.data?.id ?? null,
-      internshipId: response?.data?.internshipId ?? Number(selectedInternshipId),
-      fileName: response?.data?.fileName ?? reportFile.name,
-      submissionStatus: response?.data?.submissionStatus ?? 'SUBMITTED',
-      submittedAt: response?.data?.submittedAt ?? '',
-    });
     setReportTitle('');
     setIntroduction('');
     setCompanyOverview('');
@@ -533,8 +502,8 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
 
   return (
     <div className="workspace-stack">
-      <section className="data-grid two-up">
-        <article className="form-card">
+      <section className="report-layout">
+        <article className="form-card report-card">
           <div className="form-card-header">
             <div>
               <p className="eyebrow">Final report</p>
@@ -547,7 +516,7 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
             </button>
           </div>
 
-          <div className="auth-form">
+          <div className="auth-form report-form-grid">
             <label className="field">
               <span>Internship record</span>
               <select value={selectedInternshipId} onChange={(e) => setSelectedInternshipId(e.target.value)}>
@@ -562,37 +531,37 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
 
             <label className="field">
               <span>Report title</span>
-              <input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} placeholder="Stored inside template_content" required />
+              <input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} placeholder="Report title" required />
             </label>
 
-            <label className="field">
+            <label className="field report-span-2">
               <span>Introduction</span>
-              <textarea rows={4} value={introduction} onChange={(e) => setIntroduction(e.target.value)} placeholder="Introduction section" required />
+              <textarea rows={3} value={introduction} onChange={(e) => setIntroduction(e.target.value)} placeholder="Introduction" required />
             </label>
 
-            <label className="field">
+            <label className="field report-span-2">
               <span>Company overview</span>
-              <textarea rows={4} value={companyOverview} onChange={(e) => setCompanyOverview(e.target.value)} placeholder="Company overview section" required />
+              <textarea rows={3} value={companyOverview} onChange={(e) => setCompanyOverview(e.target.value)} placeholder="Company overview" required />
             </label>
 
-            <label className="field">
+            <label className="field report-span-2">
               <span>Work performed</span>
-              <textarea rows={5} value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} placeholder="Daily and weekly work details" required />
+              <textarea rows={3} value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} placeholder="Work performed" required />
             </label>
 
             <label className="field">
               <span>Technologies used</span>
-              <textarea rows={4} value={technologiesUsed} onChange={(e) => setTechnologiesUsed(e.target.value)} placeholder="Tools, frameworks and technologies" required />
+              <textarea rows={3} value={technologiesUsed} onChange={(e) => setTechnologiesUsed(e.target.value)} placeholder="Technologies used" required />
             </label>
 
             <label className="field">
               <span>Outcomes and learning</span>
-              <textarea rows={4} value={outcomesAndLearning} onChange={(e) => setOutcomesAndLearning(e.target.value)} placeholder="What you achieved and learned" required />
+              <textarea rows={3} value={outcomesAndLearning} onChange={(e) => setOutcomesAndLearning(e.target.value)} placeholder="Outcomes and learning" required />
             </label>
 
-            <label className="field">
+            <label className="field report-span-2">
               <span>Conclusion</span>
-              <textarea rows={4} value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="Conclusion section" required />
+              <textarea rows={3} value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="Conclusion" required />
             </label>
 
             <label className="field">
@@ -608,54 +577,26 @@ export function ReportPanel({ session, loading, runRequest }: PanelProps) {
               />
             </label>
 
-            <button
-              className="primary-button"
-              disabled={loading || !selectedInternshipId}
-              onClick={() =>
-                void runRequest('Internship report submitted', async () => {
-                  try {
-                    return await submitStructuredReport();
-                  } catch (error) {
-                    setReportSuccess('');
-                    setReportError(error instanceof Error ? error.message : String(error));
-                    throw error;
-                  }
-                })
-              }
-            >
-              {loading ? 'Submitting...' : 'Submit final report'}
-            </button>
-          </div>
-        </article>
-
-        <article className="form-card">
-          <p className="eyebrow">Database mapping</p>
-          <h3>Values written on final submit</h3>
-          <div className="detail-stack">
-            <p><strong>internship_report.internship_id:</strong> selected internship record</p>
-            <p><strong>internship_report.template_content:</strong> report title + six text sections</p>
-            <p><strong>internship_report.file_name:</strong> uploaded PDF file name</p>
-            <p><strong>internship_report.file_path:</strong> stored server path for the uploaded PDF</p>
-            <p><strong>internship_report.submission_status:</strong> `SUBMITTED`</p>
-            <p><strong>internship_report.is_draft:</strong> `false`</p>
-            <p><strong>internship_report.submitted_at:</strong> current server timestamp</p>
-            <p><strong>internship.status:</strong> `PENDING_COORDINATOR_REVIEW` after successful submit</p>
-          </div>
-
-          <hr className="section-divider" />
-
-          <p className="eyebrow">Last submit</p>
-          {lastSubmissionMeta ? (
-            <div className="detail-stack">
-              <p><strong>Report ID:</strong> {lastSubmissionMeta.id ?? 'N/A'}</p>
-              <p><strong>Internship ID:</strong> {lastSubmissionMeta.internshipId ?? 'N/A'}</p>
-              <p><strong>File name:</strong> {lastSubmissionMeta.fileName || 'N/A'}</p>
-              <p><strong>Status:</strong> {lastSubmissionMeta.submissionStatus || 'N/A'}</p>
-              <p><strong>Submitted at:</strong> {lastSubmissionMeta.submittedAt || 'N/A'}</p>
+            <div className="report-submit-wrap">
+              <button
+                className="primary-button"
+                disabled={loading || !selectedInternshipId}
+                onClick={() =>
+                  void runRequest('Internship report submitted', async () => {
+                    try {
+                      return await submitStructuredReport();
+                    } catch (error) {
+                      setReportSuccess('');
+                      setReportError(error instanceof Error ? error.message : String(error));
+                      throw error;
+                    }
+                  })
+                }
+              >
+                {loading ? 'Submitting...' : 'Submit final report'}
+              </button>
             </div>
-          ) : (
-            <p className="meta">Submit the final report once to see the returned `internship_report` metadata here.</p>
-          )}
+          </div>
         </article>
       </section>
     </div>
@@ -707,39 +648,6 @@ export function CompaniesPanel({ session, loading, runRequest }: PanelProps) {
 
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="admin"
-        eyebrow="Admin approval center"
-        title="Approve company onboarding with a sharper operational overview."
-        body="The admin workspace emphasizes queue health, onboarding throughput and high-signal action paths for registration decisions."
-      />
-
-      <MetricsRow
-        items={[
-          { label: 'Pending queue', value: String(pendingCompanies.length), detail: 'Every new company application lands here first.' },
-          { label: 'Approved companies', value: String(approvedCompanies.length), detail: 'Students can only see companies that appear in this approved list.' },
-          { label: 'Traceability', value: 'Audited', detail: 'Every action can be cross-checked through the audit stream.' },
-        ]}
-      />
-
-      <ActionGrid>
-        <ActionCard
-          title="Refresh company directories"
-          body="Reload both pending and approved company lists to verify what students can currently access."
-          actionLabel="Refresh all"
-          disabled={loading}
-          onAction={() => runRequest('Company directories refreshed', refreshCompanies)}
-        />
-        <InsightList
-          title="Operations focus"
-          items={[
-            'Use pending queue visibility to reduce company onboarding delays.',
-            'Pair approval actions with audit log review in the command room.',
-            'Students only see the records that move from pending into the approved directory.',
-          ]}
-        />
-      </ActionGrid>
-
       <section className="company-request-list">
         <article className="form-card">
           <div className="form-card-header">
@@ -828,7 +736,6 @@ export function CompaniesPanel({ session, loading, runRequest }: PanelProps) {
 }
 
 export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
-  const isAdmin = session.role === 'ADMIN';
   const [periods, setPeriods] = useState<AcademicPeriod[]>([]);
   const [periodError, setPeriodError] = useState('');
   const [periodSuccess, setPeriodSuccess] = useState('');
@@ -889,21 +796,6 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
 
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone={isAdmin ? 'admin' : 'coordinator'}
-        eyebrow={isAdmin ? 'System rules' : 'Calendar rules'}
-        title={isAdmin ? 'Control global constraints that shape the whole internship platform.' : 'Steer the academic calendar with coordinator-grade precision.'}
-        body="Manage periods, rules and thresholds in a workspace designed to feel deliberate, structured and operationally trustworthy."
-      />
-
-      <MetricsRow
-        items={[
-          { label: 'Configured periods', value: String(periods.length), detail: 'All academic periods currently stored in the system.' },
-          { label: 'Rule engine', value: 'Mutable', detail: 'System rules can be listed and updated on demand.' },
-          { label: 'Risk level', value: 'Controlled', detail: 'One workspace for governance instead of scattered admin forms.' },
-        ]}
-      />
-
       <section className="data-grid two-up">
         <article className="form-card">
           <div className="form-card-header">
@@ -1011,32 +903,6 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
           </div>
         </article>
       </section>
-
-      <ActionGrid>
-        <ActionCard
-          title="Update minimum day rule"
-          body="Apply a sample rule update for minimum internship day count and validate rule management."
-          actionLabel="Upsert rule"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Rule upserted', () =>
-              apiCall('/api/periods/rules', 'POST', session.token, {
-                ruleKey: 'MIN_INTERNSHIP_DAYS',
-                ruleValue: '20',
-                description: 'Minimum internship day count',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Governance notes"
-          items={[
-            'Students can only apply when at least one active period exists.',
-            'Approved company data and active period data together unlock the UC-004 student form.',
-            'Rule changes are safer when paired with a quick audit review.',
-          ]}
-        />
-      </ActionGrid>
     </div>
   );
 }
