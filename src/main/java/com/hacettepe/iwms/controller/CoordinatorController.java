@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -47,12 +48,19 @@ public class CoordinatorController {
                                                           @AuthenticationPrincipal CustomUserDetails currentUser) {
         Internship internship = internshipRepository.findById(internshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Internship not found"));
+        if (internship.getStatus() != InternshipStatus.PENDING_COORDINATOR_REVIEW
+                && internship.getStatus() != InternshipStatus.EVALUATED_BY_COMPANY) {
+            throw new ValidationException("Coordinator decision can only be made for internships pending coordinator review.");
+        }
         InternshipCoordinator coordinator = internshipCoordinatorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Coordinator profile not found"));
         if (request.getStatus() != InternshipStatus.APPROVED
                 && request.getStatus() != InternshipStatus.REJECTED
                 && request.getStatus() != InternshipStatus.REVISION_REQUIRED) {
             throw new ValidationException("Invalid coordinator decision status.");
+        }
+        if (request.getStatus() == InternshipStatus.REVISION_REQUIRED && !StringUtils.hasText(request.getFeedback())) {
+            throw new ValidationException("Feedback is required when revision is requested.");
         }
         internship.setCoordinator(coordinator);
         internship.setStatus(request.getStatus());
