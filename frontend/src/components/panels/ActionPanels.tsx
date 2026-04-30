@@ -956,7 +956,7 @@ export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelPr
     return response;
   }
 
-  const pendingInternships = internships.filter((internship) => internship.status === 'PENDING_COORDINATOR_REVIEW');
+  const pendingInternships = internships.filter((internship) => internship.status === 'PENDING_COMPANY_APPROVAL');
 
   return (
     <div className="workspace-stack">
@@ -964,8 +964,8 @@ export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelPr
         <div className="form-card-header">
           <div>
             <p className="eyebrow">Supervisor review</p>
-            <h3>Student reports for your company</h3>
-            <p className="meta">Only students who selected your company and submitted a report are listed here.</p>
+            <h3>Internship applications for your company</h3>
+            <p className="meta">Students who selected your company appear here for supervisor approval.</p>
             {panelError ? <p className="auth-error left-align">{panelError}</p> : null}
             {panelSuccess ? <p className="success-note">{panelSuccess}</p> : null}
           </div>
@@ -975,16 +975,16 @@ export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelPr
         </div>
 
         <div className="detail-stack supervisor-review-summary">
-          <p><strong>Total reports:</strong> {internships.length}</p>
+          <p><strong>Total applications:</strong> {internships.length}</p>
           <p><strong>Waiting for decision:</strong> {pendingInternships.length}</p>
         </div>
 
         <div className="application-list">
           {internships.length === 0 ? (
-            <p className="meta">There is no report assigned to your company yet.</p>
+            <p className="meta">There is no internship application assigned to your company yet.</p>
           ) : (
             internships.map((internship) => {
-              const pending = internship.status === 'PENDING_COORDINATOR_REVIEW';
+              const pending = internship.status === 'PENDING_COMPANY_APPROVAL';
 
               return (
                 <article key={internship.id} className="application-item">

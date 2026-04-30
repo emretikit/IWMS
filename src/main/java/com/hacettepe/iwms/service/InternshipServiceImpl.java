@@ -195,9 +195,7 @@ public class InternshipServiceImpl implements IInternshipService {
             throw new ValidationException("Supervisor email could not be validated.");
         }
 
-        List<Internship> internships = internshipRepository.findBySupervisorCompanyEmailIgnoreCase(supervisorUser.getEmail()).stream()
-                .filter(internship -> internship.getReport() != null)
-                .toList();
+        List<Internship> internships = internshipRepository.findBySupervisorCompanyEmailIgnoreCase(supervisorUser.getEmail());
         return internshipMapper.toDtoList(internships);
     }
 
@@ -225,10 +223,7 @@ public class InternshipServiceImpl implements IInternshipService {
         if (!supervisorUser.getEmail().equalsIgnoreCase(internshipSupervisor.getCompanyEmail())) {
             throw new ValidationException("You are not authorized to process this internship.");
         }
-        if (internship.getReport() == null) {
-            throw new ValidationException("This internship report has not been submitted yet.");
-        }
-        if (internship.getStatus() != InternshipStatus.PENDING_COORDINATOR_REVIEW) {
+        if (internship.getStatus() != InternshipStatus.PENDING_COMPANY_APPROVAL) {
             throw new ValidationException("This internship is not waiting for supervisor decision.");
         }
     }
