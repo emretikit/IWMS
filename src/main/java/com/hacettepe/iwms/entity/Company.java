@@ -43,7 +43,7 @@ public class Company {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "company")
+    @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InternshipSupervisor> supervisors;
 
     @OneToMany(mappedBy = "company")

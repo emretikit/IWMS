@@ -1424,6 +1424,162 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
   );
 }
 
+export function CompaniesManagementPanel({ session, loading, runRequest }: PanelProps) {
+  const [companies, setCompanies] = useState<ApprovedCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      setCompaniesLoading(true);
+      setError('');
+      try {
+        const response = await apiCall('/api/companies/approved', 'GET', session.token);
+        if (response.success && response.data) {
+          setCompanies(response.data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load companies');
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+
+    fetchCompanies();
+  }, [session.token]);
+
+  const handleDeleteCompany = async (companyId: number) => {
+    try {
+      setError('');
+      await apiCall(`/api/admin/companies/${companyId}`, 'DELETE', session.token);
+      // Only remove from list if deletion was successful
+      setCompanies(companies.filter(c => c.id !== companyId));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Şirket silinemedi';
+      setError(errorMessage);
+      setDeleteConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="workspace-stack">
+      <WorkspaceHero
+        tone="admin"
+        eyebrow="Şirket Yönetimi"
+        title="Onaylanmış şirketleri yönetin"
+        body="Sistem tarafından onaylanmış tüm şirketleri görüntüleyin ve yönetin. Bir şirketi seçerek silebilirsiniz. Eğer şirkette staj yapan birleri varsa silme işlemi yapılamaz."
+      />
+
+      {error && (
+        <article className="error-card" style={{ padding: '1rem', marginBottom: '1rem', border: '1px solid #f44336', borderRadius: '8px', backgroundColor: '#ffebee' }}>
+          <p style={{ color: '#c62828', margin: 0 }}>⚠️ {error}</p>
+        </article>
+      )}
+
+      <div style={{ padding: '1rem 0' }}>
+        <h3>Onaylanmış Şirketler ({companies.length})</h3>
+        
+        {companiesLoading ? (
+          <p>Şirketler yükleniyor...</p>
+        ) : companies.length === 0 ? (
+          <p style={{ color: '#666' }}>Onaylanmış şirket bulunmamaktadır.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {companies.map(company => (
+              <article
+                key={company.id}
+                style={{
+                  padding: '1rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: '#fafafa',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0' }}>{company.name}</h4>
+                    <p style={{ margin: '0 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>
+                      📍 {company.address}
+                    </p>
+                    {company.supervisors && company.supervisors.length > 0 && (
+                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                        <p style={{ margin: '0.5rem 0 0 0' }}>Supervisor:</p>
+                        {company.supervisors.map(sup => (
+                          <p key={sup.id} style={{ margin: '0.25rem 0' }}>
+                            • {sup.firstName} {sup.lastName} ({sup.companyEmail})
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    {deleteConfirmId === company.id ? (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                          }}
+                          onClick={() => handleDeleteCompany(company.id)}
+                          disabled={loading}
+                        >
+                          Evet, Sil
+                        </button>
+                        <button
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#999',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                          }}
+                          onClick={() => setDeleteConfirmId(null)}
+                          disabled={loading}
+                        >
+                          İptal
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setDeleteConfirmId(company.id)}
+                        disabled={loading}
+                      >
+                        Sil
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {deleteConfirmId === company.id && (
+                  <p style={{ margin: '0.5rem 0 0 0', color: '#d32f2f', fontSize: '0.85rem' }}>
+                    ⚠️ Bu işlem geri alınamaz. Emin misiniz?
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SupportPanel({ session, loading, runRequest }: { session: Session; loading: boolean; runRequest: ApiRunner }) {
   return (
     <div className="workspace-stack">

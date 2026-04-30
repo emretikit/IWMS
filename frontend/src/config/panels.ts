@@ -39,6 +39,7 @@ export function getPanels(session: Session): MenuPanel[] {
   return [
     { key: 'companies', label: 'Approvals', description: 'Handle company onboarding decisions' },
     { key: 'admin-ops', label: 'Ops', description: 'Audit logs, announcements and control actions' },
+    { key: 'manage', label: 'Yönet', description: 'Onaylanmış şirketleri yönetin' },
     { key: 'periods', label: 'Periods', description: 'Configure periods and operational thresholds' },
     common[1],
   ];

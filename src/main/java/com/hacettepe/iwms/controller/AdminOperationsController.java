@@ -7,6 +7,7 @@ import com.hacettepe.iwms.exception.ResourceNotFoundException;
 import com.hacettepe.iwms.exception.ValidationException;
 import com.hacettepe.iwms.repository.*;
 import com.hacettepe.iwms.service.AuditService;
+import com.hacettepe.iwms.service.ICompanyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,7 @@ public class AdminOperationsController {
     private final AnnouncementRepository announcementRepository;
     private final FaqEntryRepository faqEntryRepository;
     private final AuditService auditService;
+    private final ICompanyService companyService;
 
     @PutMapping("/users/{userId}/status")
     public ResponseEntity<ApiResponse<User>> updateUserStatus(@PathVariable Long userId,
@@ -82,5 +84,13 @@ public class AdminOperationsController {
         FaqEntry saved = faqEntryRepository.save(faq);
         auditService.log(currentUser.getId(), "FAQ_CREATE", "FAQ", saved.getId(), saved.getQuestion());
         return new ResponseEntity<>(new ApiResponse<>(true, "FAQ created.", saved), HttpStatus.CREATED);
+    }
+
+    @DeleteMapping("/companies/{companyId}")
+    public ResponseEntity<ApiResponse<String>> deleteCompany(@PathVariable Long companyId,
+                                                             @AuthenticationPrincipal CustomUserDetails currentUser) {
+        User admin = userRepository.findById(currentUser.getId()).orElseThrow(() -> new ResourceNotFoundException("Admin not found"));
+        companyService.deleteCompany(companyId, admin);
+        return ResponseEntity.ok(new ApiResponse<>(true, "Company deleted successfully.", "Company " + companyId + " has been deleted."));
     }
 }

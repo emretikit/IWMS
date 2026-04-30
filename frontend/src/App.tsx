@@ -9,6 +9,7 @@ import {
   AdminOpsPanel,
   ApplicationPanel,
   CompaniesPanel,
+  CompaniesManagementPanel,
   CompanyEvaluationPanel,
   CoordinatorPanel,
   HistoryPanel,
@@ -182,6 +183,7 @@ function App() {
           {activePanel === 'supervisor-complete' && session && <SupervisorCompletionPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'coordinator' && session && <CoordinatorPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'admin-ops' && session && <AdminOpsPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'manage' && session && <CompaniesManagementPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'support' && <SupportPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'history' && session && <HistoryPanel session={session} loading={loading} runRequest={runRequest} />}
         </section>
