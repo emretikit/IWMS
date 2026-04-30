@@ -13,6 +13,7 @@ import {
   CoordinatorPanel,
   HistoryPanel,
   PeriodsPanel,
+  ProfilePanel,
   ReportPanel,
   SupervisorCompletionPanel,
   SupervisorApprovalPage,
@@ -174,6 +175,7 @@ function App() {
         <section className="main-shell">
           {activePanel === 'application' && session && <ApplicationPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'report' && session && <ReportPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'profile' && session && <ProfilePanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'periods' && session && <PeriodsPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'company-eval' && session && <CompanyEvaluationPanel session={session} loading={loading} runRequest={runRequest} />}

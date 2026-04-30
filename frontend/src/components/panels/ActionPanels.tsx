@@ -61,6 +61,20 @@ type InternshipRecord = {
   hasEvaluation: boolean;
 };
 
+type ProfileData = {
+  role: 'STUDENT' | 'SUPERVISOR' | 'COORDINATOR' | 'ADMIN';
+  username: string;
+  email: string;
+  name: string;
+  surname: string;
+  title?: string;
+  engineerType?: string;
+  currentYear?: string;
+  department?: string;
+  companyName?: string;
+  companyAddress?: string;
+};
+
 function WorkspaceHero({
   eyebrow,
   title,
@@ -1114,6 +1128,190 @@ export function SupervisorCompletionPanel({ session, loading, runRequest }: Pane
               </article>
             ))
           )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ProfilePanel({ session, loading, runRequest }: PanelProps) {
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+
+  async function loadProfile() {
+    const response = await apiCall('/api/profile', 'GET', session.token);
+    const nextProfile = response?.data ?? null;
+    setProfile(nextProfile);
+    setCompanyName(nextProfile?.companyName ?? '');
+    setCompanyAddress(nextProfile?.companyAddress ?? '');
+    setProfileError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadProfile().catch((error) => {
+      setProfileError(error instanceof Error ? error.message : 'Profile could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function updatePassword() {
+    setPasswordError('');
+    setPasswordSuccess('');
+    setProfileError('');
+
+    try {
+      const response = await apiCall('/api/profile/password', 'PUT', session.token, {
+        currentPassword,
+        newPassword,
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setPasswordSuccess('Password updated successfully.');
+      return response;
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Password could not be updated.');
+      throw error;
+    }
+  }
+
+  async function updateSupervisorCompany() {
+    setProfileError('');
+    setProfileSuccess('');
+
+    const response = await apiCall('/api/profile/supervisor-company', 'PUT', session.token, {
+      companyName,
+      companyAddress,
+    });
+    const nextProfile = response?.data ?? null;
+    setProfile(nextProfile);
+    setCompanyName(nextProfile?.companyName ?? '');
+    setCompanyAddress(nextProfile?.companyAddress ?? '');
+    setProfileSuccess('Company information updated successfully.');
+    return response;
+  }
+
+  if (!profile) {
+    return (
+      <div className="workspace-stack">
+        <section className="form-card">
+          {profileError ? <p className="auth-error left-align">{profileError}</p> : <p className="meta">Loading profile...</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const isStudent = profile.role === 'STUDENT';
+  const isSupervisor = profile.role === 'SUPERVISOR';
+
+  return (
+    <div className="workspace-stack">
+      <section className="data-grid two-up">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Profilim</p>
+              <h3>Account information</h3>
+              {profileError ? <p className="auth-error left-align">{profileError}</p> : null}
+              {profileSuccess ? <p className="success-note">{profileSuccess}</p> : null}
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Profile refreshed', loadProfile)}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="detail-stack">
+            <p><strong>Username:</strong> {profile.username}</p>
+            <p><strong>Name:</strong> {profile.name || 'N/A'}</p>
+            <p><strong>Surname:</strong> {profile.surname || 'N/A'}</p>
+            <p><strong>Email:</strong> {profile.email}</p>
+            {isStudent ? <p><strong>Current year:</strong> {profile.currentYear || 'N/A'}</p> : null}
+            {isStudent ? <p><strong>Department:</strong> {profile.department || 'N/A'}</p> : null}
+            {isSupervisor ? <p><strong>Title:</strong> {profile.title || 'N/A'}</p> : null}
+            {isSupervisor ? <p><strong>Engineer type:</strong> {profile.engineerType || 'N/A'}</p> : null}
+          </div>
+        </article>
+
+        {isSupervisor ? (
+          <article className="form-card">
+            <div className="form-card-header">
+              <div>
+                <p className="eyebrow">Company</p>
+                <h3>Update company information</h3>
+              </div>
+            </div>
+
+            <div className="auth-form">
+              <label className="field">
+                <span>Company name</span>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Company address</span>
+                <textarea rows={4} value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Email</span>
+                <input value={profile.email} disabled />
+              </label>
+
+              <button
+                className="primary-button"
+                disabled={loading || !companyName.trim() || !companyAddress.trim()}
+                onClick={() => void runRequest('Company profile updated', updateSupervisorCompany)}
+              >
+                {loading ? 'Saving...' : 'Save company info'}
+              </button>
+            </div>
+          </article>
+        ) : (
+          <article className="form-card">
+            <p className="eyebrow">Student</p>
+            <h3>Academic information</h3>
+            <div className="detail-stack">
+              <p><strong>Current year:</strong> {profile.currentYear || 'N/A'}</p>
+              <p><strong>Department:</strong> {profile.department || 'N/A'}</p>
+            </div>
+          </article>
+        )}
+      </section>
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Security</p>
+            <h3>Change password</h3>
+            {passwordError ? <p className="auth-error left-align">{passwordError}</p> : null}
+            {passwordSuccess ? <p className="success-note">{passwordSuccess}</p> : null}
+          </div>
+        </div>
+
+        <div className="auth-form">
+          <label className="field">
+            <span>Current password</span>
+            <input value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} type="password" required />
+          </label>
+
+          <label className="field">
+            <span>New password</span>
+            <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" required />
+          </label>
+
+          <button
+            className="primary-button"
+            disabled={loading || !currentPassword || !newPassword}
+            onClick={() => void runRequest('Password updated', updatePassword)}
+          >
+            {loading ? 'Updating...' : 'Update password'}
+          </button>
         </div>
       </section>
     </div>
