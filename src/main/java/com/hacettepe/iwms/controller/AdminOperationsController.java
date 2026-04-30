@@ -10,14 +10,27 @@ import com.hacettepe.iwms.service.AuditService;
 import com.hacettepe.iwms.service.ICompanyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -28,6 +41,8 @@ public class AdminOperationsController {
     private final AuditLogRepository auditLogRepository;
     private final AnnouncementRepository announcementRepository;
     private final FaqEntryRepository faqEntryRepository;
+    private final StudentRepository studentRepository;
+    private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
     private final ICompanyService companyService;
 
