@@ -13,6 +13,7 @@ public interface IInternshipService {
     InternshipResponseDto applyForInternship(InternshipApplicationRequest req, Long studentUserId);
     InternshipResponseDto approveBySupervisor(Long internshipId, Long supervisorUserId);
     InternshipResponseDto rejectBySupervisor(Long internshipId, Long supervisorUserId);
+    InternshipResponseDto completeBySupervisor(Long internshipId, Long supervisorUserId);
     List<InternshipResponseDto> getStudentInternships(Long studentUserId);
     List<InternshipResponseDto> getSupervisorInternships(Long supervisorUserId);
     InternshipResponseDto getInternshipById(Long internshipId);

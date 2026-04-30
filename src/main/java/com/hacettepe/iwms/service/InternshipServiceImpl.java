@@ -176,6 +176,20 @@ public class InternshipServiceImpl implements IInternshipService {
     }
 
     @Override
+    @Transactional
+    public InternshipResponseDto completeBySupervisor(Long internshipId, Long supervisorUserId) {
+        Internship internship = internshipRepository.findById(internshipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
+        validateSupervisorOwnership(internship, supervisorUserId);
+        if (internship.getStatus() != InternshipStatus.APPROVED) {
+            throw new ValidationException("Only approved internships can be marked as completed.");
+        }
+        internship.setStatus(InternshipStatus.COMPLETED);
+        internshipRepository.save(internship);
+        return internshipMapper.toDto(internship);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<InternshipResponseDto> getStudentInternships(Long studentUserId) {
         Student student = studentRepository.findByUserId(studentUserId)
@@ -207,7 +221,7 @@ public class InternshipServiceImpl implements IInternshipService {
         return internshipMapper.toDto(internship);
     }
 
-    private void validateSupervisorAccess(Internship internship, Long supervisorUserId) {
+    private void validateSupervisorOwnership(Internship internship, Long supervisorUserId) {
         InternshipSupervisor internshipSupervisor = internship.getSupervisor();
         if (internshipSupervisor == null) {
             throw new ValidationException("No supervisor assigned to this internship.");
@@ -223,6 +237,10 @@ public class InternshipServiceImpl implements IInternshipService {
         if (!supervisorUser.getEmail().equalsIgnoreCase(internshipSupervisor.getCompanyEmail())) {
             throw new ValidationException("You are not authorized to process this internship.");
         }
+    }
+
+    private void validateSupervisorAccess(Internship internship, Long supervisorUserId) {
+        validateSupervisorOwnership(internship, supervisorUserId);
         if (internship.getStatus() != InternshipStatus.PENDING_COMPANY_APPROVAL) {
             throw new ValidationException("This internship is not waiting for supervisor decision.");
         }

@@ -19,7 +19,8 @@ export function getPanels(session: Session): MenuPanel[] {
 
   if (session.role === 'SUPERVISOR') {
     return [
-      { key: 'company-eval', label: 'Review', description: 'Review company outcomes and reports' },
+      { key: 'company-eval', label: 'Review', description: 'Approve internship applications' },
+      { key: 'supervisor-complete', label: 'Internships', description: 'Mark approved internships as completed' },
       { key: 'history', label: 'History', description: 'Past evaluations and shared feedback' },
       common[1],
     ];

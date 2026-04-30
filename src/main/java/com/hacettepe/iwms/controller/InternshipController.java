@@ -98,6 +98,14 @@ public class InternshipController {
         InternshipResponseDto responseDto = internshipService.rejectBySupervisor(internshipId, currentUser.getId());
         return ResponseEntity.ok(new ApiResponse<>(true, "Internship rejected successfully.", responseDto));
     }
+
+    @PutMapping("/{internshipId}/complete")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<ApiResponse<InternshipResponseDto>> completeBySupervisor(@PathVariable Long internshipId,
+                                                                                   @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InternshipResponseDto responseDto = internshipService.completeBySupervisor(internshipId, currentUser.getId());
+        return ResponseEntity.ok(new ApiResponse<>(true, "Internship marked as completed successfully.", responseDto));
+    }
     
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('STUDENT', 'COORDINATOR', 'ADMIN')")

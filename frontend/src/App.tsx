@@ -14,6 +14,7 @@ import {
   HistoryPanel,
   PeriodsPanel,
   ReportPanel,
+  SupervisorCompletionPanel,
   SupervisorApprovalPage,
   SupportPanel,
 } from './components/panels/ActionPanels';
@@ -176,6 +177,7 @@ function App() {
           {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'periods' && session && <PeriodsPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'company-eval' && session && <CompanyEvaluationPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'supervisor-complete' && session && <SupervisorCompletionPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'coordinator' && session && <CoordinatorPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'admin-ops' && session && <AdminOpsPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'support' && <SupportPanel session={session} loading={loading} runRequest={runRequest} />}

@@ -1030,6 +1030,96 @@ export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelPr
   );
 }
 
+export function SupervisorCompletionPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [panelError, setPanelError] = useState('');
+  const [panelSuccess, setPanelSuccess] = useState('');
+
+  async function loadSupervisorInternships() {
+    const response = await apiCall('/api/internships/supervisor', 'GET', session.token);
+    setInternships(response?.data ?? []);
+    setPanelError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadSupervisorInternships().catch((error) => {
+      setPanelError(error instanceof Error ? error.message : 'Supervisor internships could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function handleComplete(internshipId: number) {
+    setPanelError('');
+    setPanelSuccess('');
+
+    const response = await apiCall(`/api/internships/${internshipId}/complete`, 'PUT', session.token);
+    await loadSupervisorInternships();
+    setPanelSuccess(`Internship #${internshipId} marked as completed successfully.`);
+    return response;
+  }
+
+  const approvedInternships = internships.filter((internship) => internship.status === 'APPROVED');
+  const completedInternships = internships.filter((internship) => internship.status === 'COMPLETED');
+
+  return (
+    <div className="workspace-stack">
+      <section className="form-card supervisor-review-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Internship completion</p>
+            <h3>Approved internships for your company</h3>
+            <p className="meta">Mark an approved internship as completed so the student can submit the final report.</p>
+            {panelError ? <p className="auth-error left-align">{panelError}</p> : null}
+            {panelSuccess ? <p className="success-note">{panelSuccess}</p> : null}
+          </div>
+          <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Supervisor internships refreshed', loadSupervisorInternships)}>
+            Refresh list
+          </button>
+        </div>
+
+        <div className="detail-stack supervisor-review-summary">
+          <p><strong>Approved internships:</strong> {approvedInternships.length}</p>
+          <p><strong>Completed internships:</strong> {completedInternships.length}</p>
+        </div>
+
+        <div className="application-list">
+          {approvedInternships.length === 0 ? (
+            <p className="meta">There is no approved internship waiting to be completed.</p>
+          ) : (
+            approvedInternships.map((internship) => (
+              <article key={internship.id} className="application-item">
+                <div className="application-item-head">
+                  <div>
+                    <h4>{internship.studentName}</h4>
+                    <p className="meta">#{internship.id} - {internship.companyName}</p>
+                  </div>
+                  <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                </div>
+
+                <div className="application-item-body">
+                  <p><strong>Dates:</strong> {internship.startDate} - {internship.endDate}</p>
+                  <p><strong>Working days:</strong> {internship.totalWorkingDays}</p>
+                  <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                </div>
+
+                <div className="request-actions">
+                  <button
+                    className="primary-button"
+                    disabled={loading}
+                    onClick={() => void runRequest('Internship marked as completed', () => handleComplete(internship.id))}
+                  >
+                    {loading ? 'Processing...' : 'Mark completed'}
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
   return (
     <div className="workspace-stack">
