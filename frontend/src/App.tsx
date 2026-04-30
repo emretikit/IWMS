@@ -9,11 +9,14 @@ import {
   AdminOpsPanel,
   ApplicationPanel,
   CompaniesPanel,
+  CompaniesManagementPanel,
   CompanyEvaluationPanel,
   CoordinatorPanel,
   HistoryPanel,
   PeriodsPanel,
+  ProfilePanel,
   ReportPanel,
+  SupervisorCompletionPanel,
   SupervisorApprovalPage,
   SupportPanel,
 } from './components/panels/ActionPanels';
@@ -173,11 +176,14 @@ function App() {
         <section className="main-shell">
           {activePanel === 'application' && session && <ApplicationPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'report' && session && <ReportPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'profile' && session && <ProfilePanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'companies' && session && <CompaniesPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'periods' && session && <PeriodsPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'company-eval' && session && <CompanyEvaluationPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'supervisor-complete' && session && <SupervisorCompletionPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'coordinator' && session && <CoordinatorPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'admin-ops' && session && <AdminOpsPanel session={session} loading={loading} runRequest={runRequest} />}
+          {activePanel === 'manage' && session && <CompaniesManagementPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'support' && <SupportPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'history' && session && <HistoryPanel session={session} loading={loading} runRequest={runRequest} />}
         </section>

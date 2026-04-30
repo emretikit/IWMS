@@ -61,6 +61,20 @@ type InternshipRecord = {
   hasEvaluation: boolean;
 };
 
+type ProfileData = {
+  role: 'STUDENT' | 'SUPERVISOR' | 'COORDINATOR' | 'ADMIN';
+  username: string;
+  email: string;
+  name: string;
+  surname: string;
+  title?: string;
+  engineerType?: string;
+  currentYear?: string;
+  department?: string;
+  companyName?: string;
+  companyAddress?: string;
+};
+
 function WorkspaceHero({
   eyebrow,
   title,
@@ -177,6 +191,20 @@ function getInclusiveDayDifference(startDate: string, endDate: string) {
   const end = new Date(`${endDate}T00:00:00`);
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
   return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
+}
+
+function normalizeDateForApi(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const localizedMatch = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (localizedMatch) {
+    const [, day, month, year] = localizedMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  return value;
 }
 
 export function ApplicationPanel({ session, loading, runRequest }: PanelProps) {
@@ -758,11 +786,18 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
     setPeriodError('');
     setPeriodSuccess('');
 
+    const normalizedSubmissionDeadline = normalizeDateForApi(submissionDeadline);
+    const normalizedLateDeadline = normalizeDateForApi(lateDeadline);
+
     if (!periodName.trim()) {
       throw new Error('Period name is required.');
     }
 
-    if (lateDeadline < submissionDeadline) {
+    if (!normalizedSubmissionDeadline || !normalizedLateDeadline) {
+      throw new Error('Please select both submission and late deadlines.');
+    }
+
+    if (normalizedLateDeadline < normalizedSubmissionDeadline) {
       throw new Error('Late deadline cannot be before submission deadline.');
     }
 
@@ -770,8 +805,8 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
       name: periodName.trim(),
       semesterType,
       year: Number(year),
-      submissionDeadline,
-      lateDeadline,
+      submissionDeadline: normalizedSubmissionDeadline,
+      lateDeadline: normalizedLateDeadline,
       minInternshipDays: Number(minInternshipDays),
       maxOrgsPerPeriod: Number(maxOrgsPerPeriod),
       active,
@@ -908,48 +943,479 @@ export function PeriodsPanel({ session, loading, runRequest }: PanelProps) {
 }
 
 export function CompanyEvaluationPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [panelError, setPanelError] = useState('');
+  const [panelSuccess, setPanelSuccess] = useState('');
+
+  async function loadSupervisorInternships() {
+    const response = await apiCall('/api/internships/supervisor', 'GET', session.token);
+    setInternships(response?.data ?? []);
+    setPanelError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadSupervisorInternships().catch((error) => {
+      setPanelError(error instanceof Error ? error.message : 'Supervisor internships could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function handleDecision(internshipId: number, action: 'approve' | 'reject') {
+    setPanelError('');
+    setPanelSuccess('');
+
+    const response = await apiCall(`/api/internships/${internshipId}/${action}`, 'PUT', session.token);
+    await loadSupervisorInternships();
+    setPanelSuccess(`Internship #${internshipId} ${action === 'approve' ? 'approved' : 'rejected'} successfully.`);
+    return response;
+  }
+
+  const pendingInternships = internships.filter((internship) => internship.status === 'PENDING_COMPANY_APPROVAL');
+
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="supervisor"
-        eyebrow="Supervisor evaluation desk"
-        title="Review performance with a calmer, more executive evaluation surface."
-        body="Supervisors get a focused environment for internship outcome reporting, report assessment and signature-aware documentation."
-      />
+      <section className="form-card supervisor-review-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Supervisor review</p>
+            <h3>Internship applications for your company</h3>
+            <p className="meta">Students who selected your company appear here for supervisor approval.</p>
+            {panelError ? <p className="auth-error left-align">{panelError}</p> : null}
+            {panelSuccess ? <p className="success-note">{panelSuccess}</p> : null}
+          </div>
+          <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Supervisor internships refreshed', loadSupervisorInternships)}>
+            Refresh list
+          </button>
+        </div>
 
-      <MetricsRow
-        items={[
-          { label: 'Evaluation stage', value: 'Open', detail: 'Ready for document-backed company review submission.' },
-          { label: 'Report quality', value: 'Manual', detail: 'Narrative review remains under supervisor judgment.' },
-          { label: 'Signature path', value: 'Prepared', detail: 'Signature file metadata is included in the sample payload.' },
-        ]}
-      />
+        <div className="detail-stack supervisor-review-summary">
+          <p><strong>Total applications:</strong> {internships.length}</p>
+          <p><strong>Waiting for decision:</strong> {pendingInternships.length}</p>
+        </div>
 
-      <ActionGrid>
-        <ActionCard
-          title="Submit company evaluation"
-          body="Send the supervisor evaluation payload, including result notes and signature file metadata."
-          actionLabel="Submit evaluation"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Company evaluation submitted', () =>
-              apiCall('/api/company-evaluations/1', 'POST', session.token, {
-                internshipResultDocument: 'Result details',
-                reportEvaluationDocument: 'Evaluation details',
-                signatureFilePath: '/tmp/signature.png',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Review posture"
-          items={[
-            'Tie comments to real deliverables and observed workplace output.',
-            'Use concise language that supports coordinator decisions later.',
-            'Capture signature artifacts consistently for audit readiness.',
-          ]}
-        />
-      </ActionGrid>
+        <div className="application-list">
+          {internships.length === 0 ? (
+            <p className="meta">There is no internship application assigned to your company yet.</p>
+          ) : (
+            internships.map((internship) => {
+              const pending = internship.status === 'PENDING_COMPANY_APPROVAL';
+
+              return (
+                <article key={internship.id} className="application-item">
+                  <div className="application-item-head">
+                    <div>
+                      <h4>{internship.studentName}</h4>
+                      <p className="meta">#{internship.id} - {internship.companyName}</p>
+                    </div>
+                    <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                  </div>
+
+                  <div className="application-item-body">
+                    <p><strong>Dates:</strong> {internship.startDate} - {internship.endDate}</p>
+                    <p><strong>Working days:</strong> {internship.totalWorkingDays}</p>
+                    <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                  </div>
+
+                  {pending ? (
+                    <div className="request-actions">
+                      <button
+                        className="primary-button"
+                        disabled={loading}
+                        onClick={() => void runRequest('Internship approved by supervisor', () => handleDecision(internship.id, 'approve'))}
+                      >
+                        {loading ? 'Processing...' : 'Approve'}
+                      </button>
+                      <button
+                        className="ghost-button danger-button"
+                        disabled={loading}
+                        onClick={() => void runRequest('Internship rejected by supervisor', () => handleDecision(internship.id, 'reject'))}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function SupervisorCompletionPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<InternshipRecord[]>([]);
+  const [panelError, setPanelError] = useState('');
+  const [panelSuccess, setPanelSuccess] = useState('');
+  const [internshipResultDocuments, setInternshipResultDocuments] = useState<Record<number, File | null>>({});
+  const [reportEvaluationDocuments, setReportEvaluationDocuments] = useState<Record<number, File | null>>({});
+  const [signatureFiles, setSignatureFiles] = useState<Record<number, File | null>>({});
+
+  async function loadSupervisorInternships() {
+    const response = await apiCall('/api/internships/supervisor', 'GET', session.token);
+    setInternships(response?.data ?? []);
+    setPanelError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadSupervisorInternships().catch((error) => {
+      setPanelError(error instanceof Error ? error.message : 'Supervisor internships could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function handleComplete(internshipId: number) {
+    setPanelError('');
+    setPanelSuccess('');
+
+    const internshipResultDocument = internshipResultDocuments[internshipId] ?? null;
+    const reportEvaluationDocument = reportEvaluationDocuments[internshipId] ?? null;
+    const signatureFile = signatureFiles[internshipId] ?? null;
+
+    const missingDocuments: string[] = [];
+    if (!internshipResultDocument) missingDocuments.push('internship result document');
+    if (!reportEvaluationDocument) missingDocuments.push('report evaluation document');
+    if (!signatureFile) missingDocuments.push('signature file');
+
+    if (missingDocuments.length === 3) {
+      const message = 'Please upload all required documents before marking internship as completed.';
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    if (missingDocuments.length > 0) {
+      const message = `Missing required document(s): ${missingDocuments.join(', ')}.`;
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    const internshipResultPdf = internshipResultDocument as File;
+    const reportEvaluationPdf = reportEvaluationDocument as File;
+    const signature = signatureFile as File;
+
+    if (
+      (internshipResultPdf.type !== 'application/pdf' && !internshipResultPdf.name.toLowerCase().endsWith('.pdf')) ||
+      (reportEvaluationPdf.type !== 'application/pdf' && !reportEvaluationPdf.name.toLowerCase().endsWith('.pdf'))
+    ) {
+      const message = 'Internship result and report evaluation documents must be PDF files.';
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    const formData = new FormData();
+    formData.append('internshipResultDocument', internshipResultPdf);
+    formData.append('reportEvaluationDocument', reportEvaluationPdf);
+    formData.append('signatureFile', signature);
+
+    const response = await multipartApiCall(`/api/internships/${internshipId}/complete`, 'PUT', formData, session.token);
+    await loadSupervisorInternships();
+    setPanelSuccess(`Internship #${internshipId} marked as completed successfully.`);
+    setInternshipResultDocuments((current) => ({ ...current, [internshipId]: null }));
+    setReportEvaluationDocuments((current) => ({ ...current, [internshipId]: null }));
+    setSignatureFiles((current) => ({ ...current, [internshipId]: null }));
+    return response;
+  }
+
+  const approvedInternships = internships.filter((internship) => internship.status === 'APPROVED');
+  const completedInternships = internships.filter((internship) => internship.status === 'COMPLETED');
+
+  return (
+    <div className="workspace-stack">
+      <section className="form-card supervisor-review-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Internship completion</p>
+            <h3>Approved internships for your company</h3>
+            <p className="meta">Mark an approved internship as completed so the student can submit the final report.</p>
+            {panelError ? <p className="auth-error left-align">{panelError}</p> : null}
+            {panelSuccess ? <p className="success-note">{panelSuccess}</p> : null}
+          </div>
+          <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Supervisor internships refreshed', loadSupervisorInternships)}>
+            Refresh list
+          </button>
+        </div>
+
+        <div className="detail-stack supervisor-review-summary">
+          <p><strong>Approved internships:</strong> {approvedInternships.length}</p>
+          <p><strong>Completed internships:</strong> {completedInternships.length}</p>
+        </div>
+
+        <div className="application-list">
+          {approvedInternships.length === 0 ? (
+            <p className="meta">There is no approved internship waiting to be completed.</p>
+          ) : (
+            approvedInternships.map((internship) => (
+              <article key={internship.id} className="application-item">
+                <div className="application-item-head">
+                  <div>
+                    <h4>{internship.studentName}</h4>
+                    <p className="meta">#{internship.id} - {internship.companyName}</p>
+                  </div>
+                  <span className={`status-chip ${internship.status.toLowerCase().replace(/_/g, '-')}`}>{internship.status}</span>
+                </div>
+
+                <div className="application-item-body">
+                  <p><strong>Dates:</strong> {internship.startDate} - {internship.endDate}</p>
+                  <p><strong>Working days:</strong> {internship.totalWorkingDays}</p>
+                  <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
+                </div>
+
+                <div className="auth-form">
+                  <label className="field">
+                    <span>Internship result document (PDF)</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={(e) => {
+                        setInternshipResultDocuments((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Report evaluation document (PDF)</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={(e) => {
+                        setReportEvaluationDocuments((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Signature file</span>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        setSignatureFiles((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div className="request-actions">
+                  <button
+                    className="primary-button"
+                    disabled={loading}
+                    onClick={() =>
+                      void runRequest('Internship marked as completed', async () => {
+                        try {
+                          return await handleComplete(internship.id);
+                        } catch (error) {
+                          setPanelSuccess('');
+                          setPanelError(error instanceof Error ? error.message : String(error));
+                          throw error;
+                        }
+                      })
+                    }
+                  >
+                    {loading ? 'Processing...' : 'Mark completed'}
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ProfilePanel({ session, loading, runRequest }: PanelProps) {
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+
+  async function loadProfile() {
+    const response = await apiCall('/api/profile', 'GET', session.token);
+    const nextProfile = response?.data ?? null;
+    setProfile(nextProfile);
+    setCompanyName(nextProfile?.companyName ?? '');
+    setCompanyAddress(nextProfile?.companyAddress ?? '');
+    setProfileError('');
+    return response;
+  }
+
+  useEffect(() => {
+    void loadProfile().catch((error) => {
+      setProfileError(error instanceof Error ? error.message : 'Profile could not be loaded.');
+    });
+  }, [session.token]);
+
+  async function updatePassword() {
+    setPasswordError('');
+    setPasswordSuccess('');
+    setProfileError('');
+
+    try {
+      const response = await apiCall('/api/profile/password', 'PUT', session.token, {
+        currentPassword,
+        newPassword,
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setPasswordSuccess('Password updated successfully.');
+      return response;
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Password could not be updated.');
+      throw error;
+    }
+  }
+
+  async function updateSupervisorCompany() {
+    setProfileError('');
+    setProfileSuccess('');
+
+    const response = await apiCall('/api/profile/supervisor-company', 'PUT', session.token, {
+      companyName,
+      companyAddress,
+    });
+    const nextProfile = response?.data ?? null;
+    setProfile(nextProfile);
+    setCompanyName(nextProfile?.companyName ?? '');
+    setCompanyAddress(nextProfile?.companyAddress ?? '');
+    setProfileSuccess('Company information updated successfully.');
+    return response;
+  }
+
+  if (!profile) {
+    return (
+      <div className="workspace-stack">
+        <section className="form-card">
+          {profileError ? <p className="auth-error left-align">{profileError}</p> : <p className="meta">Loading profile...</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const isStudent = profile.role === 'STUDENT';
+  const isSupervisor = profile.role === 'SUPERVISOR';
+
+  return (
+    <div className="workspace-stack">
+      <section className="data-grid two-up">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Profilim</p>
+              <h3>Account information</h3>
+              {profileError ? <p className="auth-error left-align">{profileError}</p> : null}
+              {profileSuccess ? <p className="success-note">{profileSuccess}</p> : null}
+            </div>
+            <button className="ghost-button" disabled={loading} onClick={() => void runRequest('Profile refreshed', loadProfile)}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="detail-stack">
+            <p><strong>Username:</strong> {profile.username}</p>
+            <p><strong>Name:</strong> {profile.name || 'N/A'}</p>
+            <p><strong>Surname:</strong> {profile.surname || 'N/A'}</p>
+            <p><strong>Email:</strong> {profile.email}</p>
+            {isStudent ? <p><strong>Current year:</strong> {profile.currentYear || 'N/A'}</p> : null}
+            {isStudent ? <p><strong>Department:</strong> {profile.department || 'N/A'}</p> : null}
+            {isSupervisor ? <p><strong>Title:</strong> {profile.title || 'N/A'}</p> : null}
+            {isSupervisor ? <p><strong>Engineer type:</strong> {profile.engineerType || 'N/A'}</p> : null}
+          </div>
+        </article>
+
+        {isSupervisor ? (
+          <article className="form-card">
+            <div className="form-card-header">
+              <div>
+                <p className="eyebrow">Company</p>
+                <h3>Update company information</h3>
+              </div>
+            </div>
+
+            <div className="auth-form">
+              <label className="field">
+                <span>Company name</span>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Company address</span>
+                <textarea rows={4} value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} required />
+              </label>
+
+              <label className="field">
+                <span>Email</span>
+                <input value={profile.email} disabled />
+              </label>
+
+              <button
+                className="primary-button"
+                disabled={loading || !companyName.trim() || !companyAddress.trim()}
+                onClick={() => void runRequest('Company profile updated', updateSupervisorCompany)}
+              >
+                {loading ? 'Saving...' : 'Save company info'}
+              </button>
+            </div>
+          </article>
+        ) : (
+          <article className="form-card">
+            <p className="eyebrow">Student</p>
+            <h3>Academic information</h3>
+            <div className="detail-stack">
+              <p><strong>Current year:</strong> {profile.currentYear || 'N/A'}</p>
+              <p><strong>Department:</strong> {profile.department || 'N/A'}</p>
+            </div>
+          </article>
+        )}
+      </section>
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div>
+            <p className="eyebrow">Security</p>
+            <h3>Change password</h3>
+            {passwordError ? <p className="auth-error left-align">{passwordError}</p> : null}
+            {passwordSuccess ? <p className="success-note">{passwordSuccess}</p> : null}
+          </div>
+        </div>
+
+        <div className="auth-form">
+          <label className="field">
+            <span>Current password</span>
+            <input value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} type="password" required />
+          </label>
+
+          <label className="field">
+            <span>New password</span>
+            <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" required />
+          </label>
+
+          <button
+            className="primary-button"
+            disabled={loading || !currentPassword || !newPassword}
+            onClick={() => void runRequest('Password updated', updatePassword)}
+          >
+            {loading ? 'Updating...' : 'Update password'}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1056,6 +1522,162 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
           ]}
         />
       </ActionGrid>
+    </div>
+  );
+}
+
+export function CompaniesManagementPanel({ session, loading }: PanelProps) {
+  const [companies, setCompanies] = useState<ApprovedCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      setCompaniesLoading(true);
+      setError('');
+      try {
+        const response = await apiCall('/api/companies/approved', 'GET', session.token);
+        if (response.success && response.data) {
+          setCompanies(response.data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load companies');
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+
+    fetchCompanies();
+  }, [session.token]);
+
+  const handleDeleteCompany = async (companyId: number) => {
+    try {
+      setError('');
+      await apiCall(`/api/admin/companies/${companyId}`, 'DELETE', session.token);
+      // Only remove from list if deletion was successful
+      setCompanies(companies.filter(c => c.id !== companyId));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Şirket silinemedi';
+      setError(errorMessage);
+      setDeleteConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="workspace-stack">
+      <WorkspaceHero
+        tone="admin"
+        eyebrow="Şirket Yönetimi"
+        title="Onaylanmış şirketleri yönetin"
+        body="Sistem tarafından onaylanmış tüm şirketleri görüntüleyin ve yönetin. Bir şirketi seçerek silebilirsiniz. Eğer şirkette staj yapan birleri varsa silme işlemi yapılamaz."
+      />
+
+      {error && (
+        <article className="error-card" style={{ padding: '1rem', marginBottom: '1rem', border: '1px solid #f44336', borderRadius: '8px', backgroundColor: '#ffebee' }}>
+          <p style={{ color: '#c62828', margin: 0 }}>⚠️ {error}</p>
+        </article>
+      )}
+
+      <div style={{ padding: '1rem 0' }}>
+        <h3>Onaylanmış Şirketler ({companies.length})</h3>
+        
+        {companiesLoading ? (
+          <p>Şirketler yükleniyor...</p>
+        ) : companies.length === 0 ? (
+          <p style={{ color: '#666' }}>Onaylanmış şirket bulunmamaktadır.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {companies.map(company => (
+              <article
+                key={company.id}
+                style={{
+                  padding: '1rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: '#fafafa',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0' }}>{company.name}</h4>
+                    <p style={{ margin: '0 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>
+                      📍 {company.address}
+                    </p>
+                    {company.supervisors && company.supervisors.length > 0 && (
+                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                        <p style={{ margin: '0.5rem 0 0 0' }}>Supervisor:</p>
+                        {company.supervisors.map(sup => (
+                          <p key={sup.id} style={{ margin: '0.25rem 0' }}>
+                            • {sup.firstName} {sup.lastName} ({sup.companyEmail})
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    {deleteConfirmId === company.id ? (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                          }}
+                          onClick={() => handleDeleteCompany(company.id)}
+                          disabled={loading}
+                        >
+                          Evet, Sil
+                        </button>
+                        <button
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#999',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                          }}
+                          onClick={() => setDeleteConfirmId(null)}
+                          disabled={loading}
+                        >
+                          İptal
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setDeleteConfirmId(company.id)}
+                        disabled={loading}
+                      >
+                        Sil
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {deleteConfirmId === company.id && (
+                  <p style={{ margin: '0.5rem 0 0 0', color: '#d32f2f', fontSize: '0.85rem' }}>
+                    ⚠️ Bu işlem geri alınamaz. Emin misiniz?
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

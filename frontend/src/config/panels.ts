@@ -12,6 +12,7 @@ export function getPanels(session: Session): MenuPanel[] {
     return [
       { key: 'application', label: 'Apply', description: 'Start and track internship applications' },
       { key: 'report', label: 'Reports', description: 'Draft and submit internship reports' },
+      { key: 'profile', label: 'Profilim', description: 'View your information and update your password' },
       { key: 'history', label: 'History', description: 'History, feedback and personal archive' },
       common[1],
     ];
@@ -19,7 +20,9 @@ export function getPanels(session: Session): MenuPanel[] {
 
   if (session.role === 'SUPERVISOR') {
     return [
-      { key: 'company-eval', label: 'Review', description: 'Review company outcomes and reports' },
+      { key: 'company-eval', label: 'Review', description: 'Approve internship applications' },
+      { key: 'supervisor-complete', label: 'Internships', description: 'Mark approved internships as completed' },
+      { key: 'profile', label: 'Profilim', description: 'Manage company info and your password' },
       { key: 'history', label: 'History', description: 'Past evaluations and shared feedback' },
       common[1],
     ];
@@ -36,6 +39,7 @@ export function getPanels(session: Session): MenuPanel[] {
   return [
     { key: 'companies', label: 'Approvals', description: 'Handle company onboarding decisions' },
     { key: 'admin-ops', label: 'Ops', description: 'Audit logs, announcements and control actions' },
+    { key: 'manage', label: 'Yönet', description: 'Onaylanmış şirketleri yönetin' },
     { key: 'periods', label: 'Periods', description: 'Configure periods and operational thresholds' },
     common[1],
   ];

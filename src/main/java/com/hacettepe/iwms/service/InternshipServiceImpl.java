@@ -37,6 +37,7 @@ public class InternshipServiceImpl implements IInternshipService {
     private final InternshipMapper internshipMapper;
     private final InternshipReportMapper internshipReportMapper;
     private final FileStorageService fileStorageService;
+    private final CompanyEvaluationRepository companyEvaluationRepository;
     private final List<InternshipRuleValidator> ruleValidators;
 
     @Override
@@ -176,11 +177,64 @@ public class InternshipServiceImpl implements IInternshipService {
     }
 
     @Override
+    @Transactional
+    public InternshipResponseDto completeBySupervisor(Long internshipId,
+                                                      Long supervisorUserId,
+                                                      MultipartFile internshipResultDocument,
+                                                      MultipartFile reportEvaluationDocument,
+                                                      MultipartFile signatureFile) {
+        Internship internship = internshipRepository.findById(internshipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship not found with ID: " + internshipId));
+        validateSupervisorOwnership(internship, supervisorUserId);
+        if (internship.getStatus() != InternshipStatus.APPROVED) {
+            throw new ValidationException("Only approved internships can be marked as completed.");
+        }
+
+        validatePdfFile(internshipResultDocument, "Internship result document");
+        validatePdfFile(reportEvaluationDocument, "Report evaluation document");
+        validateFile(signatureFile, "Signature file");
+
+        String storageFolder = "evaluations/internship-" + internshipId;
+        String internshipResultDocumentPath = fileStorageService.store(internshipResultDocument, storageFolder);
+        String reportEvaluationDocumentPath = fileStorageService.store(reportEvaluationDocument, storageFolder);
+        String signatureFilePath = fileStorageService.store(signatureFile, storageFolder);
+
+        CompanyEvaluation evaluation = companyEvaluationRepository.findByInternshipId(internshipId).orElse(new CompanyEvaluation());
+        evaluation.setInternship(internship);
+        evaluation.setInternshipResultDocument(internshipResultDocumentPath);
+        evaluation.setReportEvaluationDocument(reportEvaluationDocumentPath);
+        evaluation.setSignatureFilePath(signatureFilePath);
+        evaluation.setSignatureSha256(calculateSha256(signatureFile));
+        evaluation.setSubmittedAt(LocalDateTime.now());
+        companyEvaluationRepository.save(evaluation);
+
+        internship.setStatus(InternshipStatus.COMPLETED);
+        internshipRepository.save(internship);
+        return internshipMapper.toDto(internship);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<InternshipResponseDto> getStudentInternships(Long studentUserId) {
         Student student = studentRepository.findByUserId(studentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found for user ID: " + studentUserId));
         return internshipMapper.toDtoList(internshipRepository.findByStudentId(student.getId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InternshipResponseDto> getSupervisorInternships(Long supervisorUserId) {
+        User supervisorUser = userRepository.findById(supervisorUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supervisor user not found."));
+        if (supervisorUser.getRole() != Role.SUPERVISOR) {
+            throw new ValidationException("Only supervisors can access this list.");
+        }
+        if (!StringUtils.hasText(supervisorUser.getEmail())) {
+            throw new ValidationException("Supervisor email could not be validated.");
+        }
+
+        List<Internship> internships = internshipRepository.findBySupervisorCompanyEmailIgnoreCase(supervisorUser.getEmail());
+        return internshipMapper.toDtoList(internships);
     }
 
     @Override
@@ -191,7 +245,7 @@ public class InternshipServiceImpl implements IInternshipService {
         return internshipMapper.toDto(internship);
     }
 
-    private void validateSupervisorAccess(Internship internship, Long supervisorUserId) {
+    private void validateSupervisorOwnership(Internship internship, Long supervisorUserId) {
         InternshipSupervisor internshipSupervisor = internship.getSupervisor();
         if (internshipSupervisor == null) {
             throw new ValidationException("No supervisor assigned to this internship.");
@@ -207,8 +261,12 @@ public class InternshipServiceImpl implements IInternshipService {
         if (!supervisorUser.getEmail().equalsIgnoreCase(internshipSupervisor.getCompanyEmail())) {
             throw new ValidationException("You are not authorized to process this internship.");
         }
+    }
+
+    private void validateSupervisorAccess(Internship internship, Long supervisorUserId) {
+        validateSupervisorOwnership(internship, supervisorUserId);
         if (internship.getStatus() != InternshipStatus.PENDING_COMPANY_APPROVAL) {
-            throw new ValidationException("This internship is not waiting for company approval.");
+            throw new ValidationException("This internship is not waiting for supervisor decision.");
         }
     }
 
@@ -222,6 +280,31 @@ public class InternshipServiceImpl implements IInternshipService {
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
         if (!lowerCaseName.endsWith(".pdf") || !contentType.contains("pdf")) {
             throw new ValidationException("Only PDF files are accepted.");
+        }
+    }
+
+    private void validatePdfFile(MultipartFile file, String label) {
+        validateFile(file, label);
+        String originalFilename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "";
+        String lowerCaseName = originalFilename.toLowerCase();
+        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+        if (!lowerCaseName.endsWith(".pdf") || !contentType.contains("pdf")) {
+            throw new ValidationException(label + " must be a PDF file.");
+        }
+    }
+
+    private void validateFile(MultipartFile file, String label) {
+        if (file == null || file.isEmpty()) {
+            throw new ValidationException(label + " is required.");
+        }
+    }
+
+    private String calculateSha256(MultipartFile file) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(file.getBytes());
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            throw new ValidationException("Signature hash could not be calculated.");
         }
     }
 

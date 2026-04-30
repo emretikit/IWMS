@@ -76,6 +76,13 @@ public class InternshipController {
         return ResponseEntity.ok(new ApiResponse<>(true, "Student internships retrieved successfully.", internships));
     }
 
+    @GetMapping("/supervisor")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<ApiResponse<List<InternshipResponseDto>>> getSupervisorInternships(@AuthenticationPrincipal CustomUserDetails currentUser) {
+        List<InternshipResponseDto> internships = internshipService.getSupervisorInternships(currentUser.getId());
+        return ResponseEntity.ok(new ApiResponse<>(true, "Supervisor internships retrieved successfully.", internships));
+    }
+
     @PutMapping("/{internshipId}/approve")
     @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<ApiResponse<InternshipResponseDto>> approveBySupervisor(@PathVariable Long internshipId,
@@ -90,6 +97,23 @@ public class InternshipController {
                                                                                   @AuthenticationPrincipal CustomUserDetails currentUser) {
         InternshipResponseDto responseDto = internshipService.rejectBySupervisor(internshipId, currentUser.getId());
         return ResponseEntity.ok(new ApiResponse<>(true, "Internship rejected successfully.", responseDto));
+    }
+
+    @PutMapping("/{internshipId}/complete")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<ApiResponse<InternshipResponseDto>> completeBySupervisor(@PathVariable Long internshipId,
+                                                                                   @RequestParam("internshipResultDocument") MultipartFile internshipResultDocument,
+                                                                                   @RequestParam("reportEvaluationDocument") MultipartFile reportEvaluationDocument,
+                                                                                   @RequestParam("signatureFile") MultipartFile signatureFile,
+                                                                                   @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InternshipResponseDto responseDto = internshipService.completeBySupervisor(
+                internshipId,
+                currentUser.getId(),
+                internshipResultDocument,
+                reportEvaluationDocument,
+                signatureFile
+        );
+        return ResponseEntity.ok(new ApiResponse<>(true, "Internship marked as completed successfully.", responseDto));
     }
     
     @GetMapping("/{id}")

@@ -7,6 +7,7 @@ import com.hacettepe.iwms.exception.ResourceNotFoundException;
 import com.hacettepe.iwms.exception.ValidationException;
 import com.hacettepe.iwms.repository.*;
 import com.hacettepe.iwms.service.AuditService;
+import com.hacettepe.iwms.service.ICompanyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -43,6 +44,7 @@ public class AdminOperationsController {
     private final StudentRepository studentRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final ICompanyService companyService;
 
     @PutMapping("/users/{userId}/status")
     public ResponseEntity<ApiResponse<User>> updateUserStatus(@PathVariable Long userId,
@@ -99,163 +101,11 @@ public class AdminOperationsController {
         return new ResponseEntity<>(new ApiResponse<>(true, "FAQ created.", saved), HttpStatus.CREATED);
     }
 
-    @PostMapping("/students/import")
-    public ResponseEntity<ApiResponse<BulkStudentImportResponse>> importStudentsFromExcel(
-            @RequestParam("file") MultipartFile file,
-            @AuthenticationPrincipal CustomUserDetails currentUser) {
-        if (file == null || file.isEmpty()) {
-            throw new ValidationException("Excel file is required.");
-        }
-        String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
-        if (!name.endsWith(".xlsx")) {
-            throw new ValidationException("Only .xlsx files are supported.");
-        }
-
-        DataFormatter formatter = new DataFormatter();
-        int created = 0;
-        int totalRows = 0;
-        List<String> skipped = new ArrayList<>();
-
-        try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
-            Sheet sheet = workbook.getSheetAt(0);
-            Row headerRow = sheet.getRow(0);
-            if (headerRow == null) {
-                throw new ValidationException("Excel header row is missing.");
-            }
-            Map<String, Integer> headerMap = buildHeaderMap(headerRow, formatter);
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) {
-                    continue;
-                }
-                totalRows++;
-                String studentNumber = getCell(row, headerMap, formatter, "ogrenci no");
-                String status = getCell(row, headerMap, formatter, "durum");
-                String firstName = getCell(row, headerMap, formatter, "adi");
-                String lastName = getCell(row, headerMap, formatter, "soyadi");
-                String faculty = getCell(row, headerMap, formatter, "fakulte");
-                String department = getCell(row, headerMap, formatter, "program");
-                String year = getCell(row, headerMap, formatter, "sinif");
-                String gradeNote = getCell(row, headerMap, formatter, "not");
-                String advisorName = getCell(row, headerMap, formatter, "danisman");
-                String email = getCell(row, headerMap, formatter, "e posta");
-                String agnoText = getCell(row, headerMap, formatter, "agno");
-                String educationType = getCell(row, headerMap, formatter, "a tipi");
-                String registrationDate = getCell(row, headerMap, formatter, "kayit tarihi");
-
-                String username = toUsernameFromEmail(email);
-                String password = "Stu@" + studentNumber;
-                boolean active = !StringUtils.hasText(status) || status.toLowerCase(Locale.ROOT).contains("aktif");
-
-                if (!StringUtils.hasText(studentNumber) || !StringUtils.hasText(email) || !StringUtils.hasText(year)) {
-                    skipped.add("Row " + (i + 1) + ": missing required columns.");
-                    continue;
-                }
-                if (!StringUtils.hasText(username)) {
-                    skipped.add("Row " + (i + 1) + ": email is invalid for username generation.");
-                    continue;
-                }
-                if (userRepository.findByUsername(username).isPresent()) {
-                    skipped.add("Row " + (i + 1) + ": username already exists (" + username + ").");
-                    continue;
-                }
-                if (userRepository.findByEmail(email).isPresent()) {
-                    skipped.add("Row " + (i + 1) + ": email already exists (" + email + ").");
-                    continue;
-                }
-                if (studentRepository.findByStudentNumber(studentNumber).isPresent()) {
-                    skipped.add("Row " + (i + 1) + ": student number already exists (" + studentNumber + ").");
-                    continue;
-                }
-                if ("1".equals(year)) {
-                    skipped.add("Row " + (i + 1) + ": first-year students cannot be created for internship workflow.");
-                    continue;
-                }
-
-                User user = User.builder()
-                        .username(username)
-                        .email(email)
-                        .passwordHash(passwordEncoder.encode(password))
-                        .role(Role.STUDENT)
-                        .name(firstName)
-                        .surname(lastName)
-                        .isActive(active)
-                        .build();
-                User savedUser = userRepository.save(user);
-
-                Student student = Student.builder()
-                        .user(savedUser)
-                        .studentNumber(studentNumber)
-                        .currentYear(year)
-                        .department(department)
-                        .faculty(faculty)
-                        .advisorName(advisorName)
-                        .educationType(educationType)
-                        .registrationDate(registrationDate)
-                        .gradeNote(gradeNote)
-                        .agno(parseAgno(agnoText))
-                        .build();
-                studentRepository.save(student);
-                created++;
-            }
-        } catch (Exception ex) {
-            throw new ValidationException("Failed to parse Excel file: " + ex.getMessage());
-        }
-
-        BulkStudentImportResponse response = BulkStudentImportResponse.builder()
-                .totalRows(totalRows)
-                .createdCount(created)
-                .skipped(skipped)
-                .build();
-        auditService.log(currentUser.getId(), "STUDENT_BULK_IMPORT", "STUDENT", null, "created=" + created + ", totalRows=" + totalRows);
-        return ResponseEntity.ok(new ApiResponse<>(true, "Student import completed.", response));
-    }
-
-    private Map<String, Integer> buildHeaderMap(Row headerRow, DataFormatter formatter) {
-        Map<String, Integer> map = new HashMap<>();
-        for (int i = 0; i < headerRow.getLastCellNum(); i++) {
-            String header = formatter.formatCellValue(headerRow.getCell(i)).trim();
-            if (StringUtils.hasText(header)) {
-                map.put(normalizeHeader(header), i);
-            }
-        }
-        return map;
-    }
-
-    private String getCell(Row row, Map<String, Integer> headerMap, DataFormatter formatter, String headerBase) {
-        Integer idx = headerMap.get(normalizeHeader(headerBase));
-        if (idx == null) {
-            return "";
-        }
-        return formatter.formatCellValue(row.getCell(idx)).trim();
-    }
-
-    private String normalizeHeader(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT).trim();
-        normalized = normalized.replace('ö', 'o').replace('ğ', 'g').replace('ı', 'i')
-                .replace('ş', 's').replace('ç', 'c').replace('ü', 'u');
-        normalized = normalized.replace('-', ' ');
-        normalized = normalized.replaceAll("_\\d+$", "");
-        normalized = normalized.replaceAll("\\s+", " ").trim();
-        return normalized;
-    }
-
-    private String toUsernameFromEmail(String email) {
-        if (!StringUtils.hasText(email) || !email.contains("@")) {
-            return "";
-        }
-        String raw = email.substring(0, email.indexOf('@')).toLowerCase(Locale.ROOT);
-        return raw.replaceAll("[^a-z0-9._-]", "");
-    }
-
-    private Double parseAgno(String agnoText) {
-        if (!StringUtils.hasText(agnoText)) {
-            return null;
-        }
-        try {
-            return Double.valueOf(agnoText.replace(",", "."));
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+    @DeleteMapping("/companies/{companyId}")
+    public ResponseEntity<ApiResponse<String>> deleteCompany(@PathVariable Long companyId,
+                                                             @AuthenticationPrincipal CustomUserDetails currentUser) {
+        User admin = userRepository.findById(currentUser.getId()).orElseThrow(() -> new ResourceNotFoundException("Admin not found"));
+        companyService.deleteCompany(companyId, admin);
+        return ResponseEntity.ok(new ApiResponse<>(true, "Company deleted successfully.", "Company " + companyId + " has been deleted."));
     }
 }

@@ -14,4 +14,5 @@ public interface ICompanyService {
     List<CompanyResponseDto> getAllCompanies();
     List<CompanyResponseDto> getApprovedCompanies();
     CompanyResponseDto getCompanyById(Long companyId);
+    void deleteCompany(Long companyId, User admin);
 }

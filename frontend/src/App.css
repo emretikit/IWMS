@@ -1519,6 +1519,14 @@ pre {
   width: 100%;
 }
 
+.supervisor-review-card {
+  width: 100%;
+}
+
+.supervisor-review-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .report-form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -8,4 +8,5 @@ import java.util.List;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     List<AuditLog> findByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+    List<AuditLog> findByUserId(Long userId);
 }
