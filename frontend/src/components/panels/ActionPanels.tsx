@@ -1048,6 +1048,9 @@ export function SupervisorCompletionPanel({ session, loading, runRequest }: Pane
   const [internships, setInternships] = useState<InternshipRecord[]>([]);
   const [panelError, setPanelError] = useState('');
   const [panelSuccess, setPanelSuccess] = useState('');
+  const [internshipResultDocuments, setInternshipResultDocuments] = useState<Record<number, File | null>>({});
+  const [reportEvaluationDocuments, setReportEvaluationDocuments] = useState<Record<number, File | null>>({});
+  const [signatureFiles, setSignatureFiles] = useState<Record<number, File | null>>({});
 
   async function loadSupervisorInternships() {
     const response = await apiCall('/api/internships/supervisor', 'GET', session.token);
@@ -1066,9 +1069,51 @@ export function SupervisorCompletionPanel({ session, loading, runRequest }: Pane
     setPanelError('');
     setPanelSuccess('');
 
-    const response = await apiCall(`/api/internships/${internshipId}/complete`, 'PUT', session.token);
+    const internshipResultDocument = internshipResultDocuments[internshipId] ?? null;
+    const reportEvaluationDocument = reportEvaluationDocuments[internshipId] ?? null;
+    const signatureFile = signatureFiles[internshipId] ?? null;
+
+    const missingDocuments: string[] = [];
+    if (!internshipResultDocument) missingDocuments.push('internship result document');
+    if (!reportEvaluationDocument) missingDocuments.push('report evaluation document');
+    if (!signatureFile) missingDocuments.push('signature file');
+
+    if (missingDocuments.length === 3) {
+      const message = 'Please upload all required documents before marking internship as completed.';
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    if (missingDocuments.length > 0) {
+      const message = `Missing required document(s): ${missingDocuments.join(', ')}.`;
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    const internshipResultPdf = internshipResultDocument as File;
+    const reportEvaluationPdf = reportEvaluationDocument as File;
+    const signature = signatureFile as File;
+
+    if (
+      (internshipResultPdf.type !== 'application/pdf' && !internshipResultPdf.name.toLowerCase().endsWith('.pdf')) ||
+      (reportEvaluationPdf.type !== 'application/pdf' && !reportEvaluationPdf.name.toLowerCase().endsWith('.pdf'))
+    ) {
+      const message = 'Internship result and report evaluation documents must be PDF files.';
+      setPanelError(message);
+      throw new Error(message);
+    }
+
+    const formData = new FormData();
+    formData.append('internshipResultDocument', internshipResultPdf);
+    formData.append('reportEvaluationDocument', reportEvaluationPdf);
+    formData.append('signatureFile', signature);
+
+    const response = await multipartApiCall(`/api/internships/${internshipId}/complete`, 'PUT', formData, session.token);
     await loadSupervisorInternships();
     setPanelSuccess(`Internship #${internshipId} marked as completed successfully.`);
+    setInternshipResultDocuments((current) => ({ ...current, [internshipId]: null }));
+    setReportEvaluationDocuments((current) => ({ ...current, [internshipId]: null }));
+    setSignatureFiles((current) => ({ ...current, [internshipId]: null }));
     return response;
   }
 
@@ -1116,11 +1161,68 @@ export function SupervisorCompletionPanel({ session, loading, runRequest }: Pane
                   <p><strong>Report submitted:</strong> {internship.hasReport ? 'Yes' : 'No'}</p>
                 </div>
 
+                <div className="auth-form">
+                  <label className="field">
+                    <span>Internship result document (PDF)</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={(e) => {
+                        setInternshipResultDocuments((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Report evaluation document (PDF)</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={(e) => {
+                        setReportEvaluationDocuments((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Signature file</span>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        setSignatureFiles((current) => ({
+                          ...current,
+                          [internship.id]: e.target.files?.[0] ?? null,
+                        }));
+                        setPanelError('');
+                      }}
+                      required
+                    />
+                  </label>
+                </div>
+
                 <div className="request-actions">
                   <button
                     className="primary-button"
                     disabled={loading}
-                    onClick={() => void runRequest('Internship marked as completed', () => handleComplete(internship.id))}
+                    onClick={() =>
+                      void runRequest('Internship marked as completed', async () => {
+                        try {
+                          return await handleComplete(internship.id);
+                        } catch (error) {
+                          setPanelSuccess('');
+                          setPanelError(error instanceof Error ? error.message : String(error));
+                          throw error;
+                        }
+                      })
+                    }
                   >
                     {loading ? 'Processing...' : 'Mark completed'}
                   </button>
@@ -1424,7 +1526,7 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
   );
 }
 
-export function CompaniesManagementPanel({ session, loading, runRequest }: PanelProps) {
+export function CompaniesManagementPanel({ session, loading }: PanelProps) {
   const [companies, setCompanies] = useState<ApprovedCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);

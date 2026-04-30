@@ -102,8 +102,17 @@ public class InternshipController {
     @PutMapping("/{internshipId}/complete")
     @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<ApiResponse<InternshipResponseDto>> completeBySupervisor(@PathVariable Long internshipId,
+                                                                                   @RequestParam("internshipResultDocument") MultipartFile internshipResultDocument,
+                                                                                   @RequestParam("reportEvaluationDocument") MultipartFile reportEvaluationDocument,
+                                                                                   @RequestParam("signatureFile") MultipartFile signatureFile,
                                                                                    @AuthenticationPrincipal CustomUserDetails currentUser) {
-        InternshipResponseDto responseDto = internshipService.completeBySupervisor(internshipId, currentUser.getId());
+        InternshipResponseDto responseDto = internshipService.completeBySupervisor(
+                internshipId,
+                currentUser.getId(),
+                internshipResultDocument,
+                reportEvaluationDocument,
+                signatureFile
+        );
         return ResponseEntity.ok(new ApiResponse<>(true, "Internship marked as completed successfully.", responseDto));
     }
     
