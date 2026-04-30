@@ -37,6 +37,24 @@ public class Student {
     @Column(length = 100)
     private String department;
 
+    @Column(length = 150)
+    private String faculty;
+
+    @Column(name = "advisor_name", length = 150)
+    private String advisorName;
+
+    @Column(name = "education_type", length = 50)
+    private String educationType;
+
+    @Column(name = "registration_date", length = 50)
+    private String registrationDate;
+
+    @Column(name = "grade_note", length = 50)
+    private String gradeNote;
+
+    @Column(name = "agno")
+    private Double agno;
+
     @OneToMany(mappedBy = "student")
     private List<Internship> internships;
 
