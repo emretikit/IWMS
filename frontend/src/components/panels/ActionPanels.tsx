@@ -1008,6 +1008,32 @@ export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
 }
 
 export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
+  const [studentExcel, setStudentExcel] = useState<File | null>(null);
+  const [importSummary, setImportSummary] = useState('');
+  const [importError, setImportError] = useState('');
+
+  async function importStudents() {
+    setImportSummary('');
+    setImportError('');
+    if (!studentExcel) {
+      throw new Error('Please select an Excel file first.');
+    }
+    if (!studentExcel.name.toLowerCase().endsWith('.xlsx')) {
+      throw new Error('Only .xlsx files are supported.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', studentExcel);
+    const response = await multipartApiCall('/api/admin/students/import', 'POST', formData, session.token);
+    const data = response?.data;
+    if (data) {
+      const skipped = Array.isArray(data.skipped) && data.skipped.length > 0 ? ` Skipped: ${data.skipped.length}.` : '';
+      setImportSummary(`Rows: ${data.totalRows ?? 0}. Created: ${data.createdCount ?? 0}.${skipped}`);
+    }
+    setStudentExcel(null);
+    return response;
+  }
+
   return (
     <div className="workspace-stack">
       <WorkspaceHero
@@ -1056,6 +1082,48 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
           ]}
         />
       </ActionGrid>
+
+      <section className="data-grid">
+        <article className="form-card">
+          <div className="form-card-header">
+            <div>
+              <p className="eyebrow">Bulk onboarding</p>
+              <h3>Import students from Excel</h3>
+              {importError ? <p className="auth-error left-align">{importError}</p> : null}
+              {importSummary ? <p className="success-note">{importSummary}</p> : null}
+            </div>
+          </div>
+
+          <div className="auth-form">
+            <label className="field">
+              <span>Excel file (.xlsx)</span>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(event) => setStudentExcel(event.target.files?.[0] ?? null)}
+              />
+            </label>
+
+            <button
+              className="primary-button"
+              disabled={loading || !studentExcel}
+              onClick={() =>
+                void runRequest('Student Excel import completed', async () => {
+                  try {
+                    return await importStudents();
+                  } catch (error) {
+                    setImportSummary('');
+                    setImportError(error instanceof Error ? error.message : String(error));
+                    throw error;
+                  }
+                })
+              }
+            >
+              {loading ? 'Importing...' : 'Import students'}
+            </button>
+          </div>
+        </article>
+      </section>
     </div>
   );
 }

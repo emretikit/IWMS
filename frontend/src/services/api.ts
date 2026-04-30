@@ -1,6 +1,6 @@
 import type { ApiMethod } from '../types';
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081';
 
 export async function apiCall(path: string, method: ApiMethod, token?: string, body?: unknown) {
   const response = await fetch(`${API_BASE}${path}`, {
