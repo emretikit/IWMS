@@ -22,3 +22,5 @@ temp/
 .DS_Store
 Thumbs.db
  docker-compose.yml
+
+ uploads/
