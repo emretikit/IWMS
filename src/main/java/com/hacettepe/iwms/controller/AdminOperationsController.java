@@ -108,4 +108,135 @@ public class AdminOperationsController {
         companyService.deleteCompany(companyId, admin);
         return ResponseEntity.ok(new ApiResponse<>(true, "Company deleted successfully.", "Company " + companyId + " has been deleted."));
     }
+
+    @PostMapping(value = "/students/import", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<BulkStudentImportResponse>> importStudents(
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        if (file == null || file.isEmpty()) {
+            throw new ValidationException("Excel file is required.");
+        }
+
+        BulkStudentImportResponse result = BulkStudentImportResponse.builder()
+                .totalRows(0)
+                .createdCount(0)
+                .skipped(new ArrayList<>())
+                .build();
+
+        Map<String, String> wantedHeaders = new HashMap<>();
+        wantedHeaders.put("studentNumber", "öğrenci no");
+        wantedHeaders.put("name", "adı");
+        wantedHeaders.put("surname", "soyadı");
+        wantedHeaders.put("department", "program");
+        wantedHeaders.put("currentYear", "sınıf");
+        wantedHeaders.put("email", "e-posta");
+
+        try (InputStream input = file.getInputStream();
+             Workbook workbook = WorkbookFactory.create(input)) {
+            Sheet sheet = workbook.getSheetAt(0);
+            DataFormatter formatter = new DataFormatter(Locale.ROOT);
+            Row headerRow = sheet.getRow(sheet.getFirstRowNum());
+            if (headerRow == null) {
+                throw new ValidationException("The uploaded spreadsheet is empty.");
+            }
+
+            Map<String, Integer> columnIndex = new HashMap<>();
+            short lastHeader = headerRow.getLastCellNum();
+            for (int c = 0; c < lastHeader; c++) {
+                String raw = formatter.formatCellValue(headerRow.getCell(c)).trim();
+                if (raw.isEmpty()) continue;
+                String normalized = raw.toLowerCase(Locale.ROOT).split("_", 2)[0].trim();
+                for (Map.Entry<String, String> entry : wantedHeaders.entrySet()) {
+                    if (normalized.equals(entry.getValue()) && !columnIndex.containsKey(entry.getKey())) {
+                        columnIndex.put(entry.getKey(), c);
+                    }
+                }
+            }
+
+            for (String key : wantedHeaders.keySet()) {
+                if (!columnIndex.containsKey(key)) {
+                    throw new ValidationException("Required column missing in spreadsheet header: " + wantedHeaders.get(key));
+                }
+            }
+
+            String defaultPasswordHash = passwordEncoder.encode("123456");
+            List<String> skipped = result.getSkipped();
+            int considered = 0;
+
+            for (int r = sheet.getFirstRowNum() + 1; r <= sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+
+                String studentNumber = readCell(row, columnIndex.get("studentNumber"), formatter);
+                String name = readCell(row, columnIndex.get("name"), formatter);
+                String surname = readCell(row, columnIndex.get("surname"), formatter);
+                String department = readCell(row, columnIndex.get("department"), formatter);
+                String currentYear = readCell(row, columnIndex.get("currentYear"), formatter);
+                String email = readCell(row, columnIndex.get("email"), formatter);
+
+                if (studentNumber.isEmpty() && name.isEmpty() && surname.isEmpty()
+                        && department.isEmpty() && currentYear.isEmpty() && email.isEmpty()) {
+                    continue;
+                }
+
+                considered++;
+
+                if (studentNumber.isEmpty() || name.isEmpty() || surname.isEmpty()
+                        || department.isEmpty() || currentYear.isEmpty() || email.isEmpty()) {
+                    String label = StringUtils.hasText(studentNumber) ? studentNumber : "Row " + (r + 1);
+                    skipped.add("Student " + label + " could not be created (missing required field).");
+                    continue;
+                }
+
+                if (studentRepository.findByStudentNumber(studentNumber).isPresent()
+                        || userRepository.findByUsername(studentNumber).isPresent()) {
+                    skipped.add("Student " + studentNumber + " could not be created (already exists).");
+                    continue;
+                }
+
+                if (userRepository.findByEmail(email).isPresent()) {
+                    skipped.add("Student " + studentNumber + " could not be created (email already in use).");
+                    continue;
+                }
+
+                try {
+                    User user = User.builder()
+                            .username(studentNumber)
+                            .email(email)
+                            .passwordHash(defaultPasswordHash)
+                            .role(Role.STUDENT)
+                            .name(name)
+                            .surname(surname)
+                            .isActive(true)
+                            .build();
+                    User savedUser = userRepository.save(user);
+
+                    Student student = Student.builder()
+                            .user(savedUser)
+                            .studentNumber(studentNumber)
+                            .department(department)
+                            .currentYear(currentYear)
+                            .build();
+                    studentRepository.save(student);
+
+                    result.setCreatedCount(result.getCreatedCount() + 1);
+                } catch (Exception ex) {
+                    skipped.add("Student " + studentNumber + " could not be created.");
+                }
+            }
+
+            result.setTotalRows(considered);
+            auditService.log(currentUser.getId(), "STUDENT_BULK_IMPORT", "STUDENT", null,
+                    "created=" + result.getCreatedCount() + " skipped=" + skipped.size());
+        } catch (java.io.IOException ex) {
+            throw new ValidationException("Could not read Excel file: " + ex.getMessage());
+        }
+
+        return ResponseEntity.ok(new ApiResponse<>(true, "Bulk import completed.", result));
+    }
+
+    private static String readCell(Row row, Integer index, DataFormatter formatter) {
+        if (index == null) return "";
+        return formatter.formatCellValue(row.getCell(index)).trim();
+    }
 }

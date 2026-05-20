@@ -12,7 +12,7 @@ export function getPanels(session: Session): MenuPanel[] {
     return [
       { key: 'application', label: 'Apply', description: 'Start and track internship applications' },
       { key: 'report', label: 'Reports', description: 'Draft and submit internship reports' },
-      { key: 'profile', label: 'Profilim', description: 'View your information and update your password' },
+      { key: 'profile', label: 'My Profile', description: 'View your information and update your password' },
       { key: 'history', label: 'History', description: 'History, feedback and personal archive' },
       common[1],
     ];
@@ -22,7 +22,7 @@ export function getPanels(session: Session): MenuPanel[] {
     return [
       { key: 'company-eval', label: 'Review', description: 'Approve internship applications' },
       { key: 'supervisor-complete', label: 'Internships', description: 'Mark approved internships as completed' },
-      { key: 'profile', label: 'Profilim', description: 'Manage company info and your password' },
+      { key: 'profile', label: 'My Profile', description: 'Manage company info and your password' },
       { key: 'history', label: 'History', description: 'Past evaluations and shared feedback' },
       common[1],
     ];
