@@ -1780,3 +1780,146 @@ pre {
     justify-content: flex-start;
   }
 }
+
+.coordinator-queue-card {
+  display: grid;
+  gap: 12px;
+}
+
+.coordinator-queue {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.coordinator-queue-item {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 16px;
+  background: #fffafb;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.coordinator-queue-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.coordinator-queue-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coordinator-queue-summary strong {
+  color: #202833;
+  font-size: 14px;
+}
+
+.coordinator-queue-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.coordinator-queue-status .ghost-button {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 12px;
+}
+
+.coordinator-queue-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.coordinator-violations {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.coordinator-violations li {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(176, 58, 46, 0.08);
+  font-size: 13px;
+}
+
+.coordinator-detail {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.14);
+  display: grid;
+  gap: 14px;
+}
+
+.coordinator-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.coordinator-report-content {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  max-height: 180px;
+  overflow: auto;
+  background: #11192a;
+  color: #ecf2ff;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.coordinator-decision {
+  display: grid;
+  gap: 10px;
+}
+
+.coordinator-decision-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.coordinator-decision-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  font-size: 13px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.coordinator-decision-chip input {
+  width: auto;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .coordinator-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coordinator-queue-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
