@@ -1,9 +1,8 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import type { Role, Session } from './types';
 import AuthPanel, { CompanyRegistrationPanel } from './components/panels/AuthPanel';
 import Sidebar from './components/layout/Sidebar';
-import ResultPanel from './components/layout/ResultPanel';
 import { getPanels } from './config/panels';
 import {
   AdminOpsPanel,
@@ -20,20 +19,6 @@ import {
   SupervisorApprovalPage,
   SupportPanel,
 } from './components/panels/ActionPanels';
-
-type ApiFeedback = {
-  title: string;
-  body: string;
-  isError: boolean;
-  lastUpdated: string;
-};
-
-const defaultFeedback: ApiFeedback = {
-  title: 'Awaiting action',
-  body: '',
-  isError: false,
-  lastUpdated: 'just now',
-};
 
 function getDefaultPanel(role: Role) {
   if (role === 'STUDENT') return 'application';
@@ -54,7 +39,6 @@ function getSupervisorTokenFromPath(pathname: string) {
 function App() {
   const [session, setSession] = useState<Session>(null);
   const [activePanel, setActivePanel] = useState('auth');
-  const [feedback, setFeedback] = useState<ApiFeedback>(defaultFeedback);
   const [loading, setLoading] = useState(false);
   const [pathname, setPathname] = useState(window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
@@ -85,28 +69,12 @@ function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  async function runRequest(title: string, request: () => Promise<unknown>) {
+  async function runRequest(_title: string, request: () => Promise<unknown>) {
     setLoading(true);
     try {
-      const data = await request();
-      startTransition(() => {
-        setFeedback({
-          title,
-          body: JSON.stringify(data, null, 2),
-          isError: false,
-          lastUpdated: new Date().toLocaleTimeString(),
-        });
-      });
+      await request();
       return true;
-    } catch (error) {
-      startTransition(() => {
-        setFeedback({
-          title: 'Request failed',
-          body: error instanceof Error ? error.message : String(error),
-          isError: true,
-          lastUpdated: new Date().toLocaleTimeString(),
-        });
-      });
+    } catch {
       return false;
     } finally {
       setLoading(false);
@@ -158,7 +126,6 @@ function App() {
         onLogout={() => {
           setNavOpen(false);
           setSession(null);
-          setFeedback(defaultFeedback);
           navigateTo('/');
         }}
       />
@@ -187,10 +154,6 @@ function App() {
           {activePanel === 'support' && <SupportPanel session={session} loading={loading} runRequest={runRequest} />}
           {activePanel === 'history' && session && <HistoryPanel session={session} loading={loading} runRequest={runRequest} />}
         </section>
-
-        <div className="activity-feed-row">
-          <ResultPanel result={feedback.body} title={feedback.title} isError={feedback.isError} lastUpdated={feedback.lastUpdated} />
-        </div>
       </main>
     </div>
   );

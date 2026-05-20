@@ -1318,7 +1318,7 @@ export function ProfilePanel({ session, loading, runRequest }: PanelProps) {
         <article className="form-card">
           <div className="form-card-header">
             <div>
-              <p className="eyebrow">Profilim</p>
+              <p className="eyebrow">My Profile</p>
               <h3>Account information</h3>
               {profileError ? <p className="auth-error left-align">{profileError}</p> : null}
               {profileSuccess ? <p className="success-note">{profileSuccess}</p> : null}
@@ -1473,55 +1473,116 @@ export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
   );
 }
 
+type BulkStudentImportResult = {
+  totalRows: number;
+  createdCount: number;
+  skipped: string[];
+};
+
 export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState('');
+  const [result, setResult] = useState<BulkStudentImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function resetFileInput() {
+    setFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleUpload() {
+    if (!file) {
+      setImportError('Please choose an Excel file first.');
+      return;
+    }
+    setImportError('');
+    setResult(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    void runRequest('Bulk student import completed', async () => {
+      try {
+        const response = await multipartApiCall('/api/admin/students/import', 'POST', formData, session.token);
+        const data = response?.data as BulkStudentImportResult | undefined;
+        if (data) {
+          setResult(data);
+        }
+        resetFileInput();
+        return response;
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+    });
+  }
+
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="admin"
-        eyebrow="Admin command room"
-        title="Operate the platform like a real production control center."
-        body="Audit visibility, announcement publishing and system guardrails now live in a denser, more polished operations workspace."
-      />
+      <header className="faq-header">
+        <p className="eyebrow">Admin operations</p>
+        <h2>Import student users from Excel</h2>
+        <p className="meta">
+          Upload the department spreadsheet to create student accounts in bulk. The username will be the student number
+          and the default password will be <strong>123456</strong>. Rows with any missing required field are skipped.
+        </p>
+      </header>
 
-      <MetricsRow
-        items={[
-          { label: 'Audit access', value: 'Enabled', detail: 'Inspect the operational trail from a single click.' },
-          { label: 'Comms lane', value: 'Broadcast', detail: 'Announcements can be published directly to the platform.' },
-          { label: 'System stance', value: 'Proactive', detail: 'Pair this area with approvals and rules for full control.' },
-        ]}
-      />
+      <section className="form-card">
+        <div className="form-card-header">
+          <h3>Spreadsheet upload</h3>
+        </div>
 
-      <ActionGrid>
-        <ActionCard
-          title="Read audit logs"
-          body="Open the audit trail to inspect critical actions, login events and approval history."
-          actionLabel="Fetch audit logs"
-          disabled={loading}
-          onAction={() => runRequest('Audit logs loaded', () => apiCall('/api/admin/audit-logs', 'GET', session.token))}
-        />
-        <ActionCard
-          title="Create announcement"
-          body="Send a sample platform announcement about upcoming internship report deadlines."
-          actionLabel="Publish notice"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Announcement created', () =>
-              apiCall('/api/admin/announcements', 'POST', session.token, {
-                title: 'Submission Deadline',
-                content: 'Do not miss the upcoming report deadline.',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Admin rhythm"
-          items={[
-            'Use announcements to reduce repetitive support load.',
-            'Audit review is the fastest way to validate critical operations.',
-            'Company approvals and rules should be treated as one shared system surface.',
-          ]}
-        />
-      </ActionGrid>
+        <label className="field">
+          <span>Excel file (.xlsx)</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null);
+              setImportError('');
+            }}
+          />
+        </label>
+
+        {importError ? <p className="auth-error left-align">{importError}</p> : null}
+
+        <div className="request-actions">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={loading || !file}
+            onClick={() => void handleUpload()}
+          >
+            {loading ? 'Importing...' : 'Import students'}
+          </button>
+        </div>
+      </section>
+
+      {result ? (
+        <section className="form-card import-result">
+          <div className="form-card-header">
+            <h3>Import summary</h3>
+          </div>
+          {result.skipped.length === 0 ? (
+            <p className="success-note">{result.createdCount} student users created.</p>
+          ) : (
+            <>
+              <p className="success-note">
+                {result.createdCount} student user{result.createdCount === 1 ? '' : 's'} created.
+              </p>
+              <ul className="import-error-list">
+                {result.skipped.map((line, idx) => (
+                  <li key={`${idx}-${line}`} className="auth-error left-align">{line}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1682,47 +1743,116 @@ export function CompaniesManagementPanel({ session, loading }: PanelProps) {
   );
 }
 
-export function SupportPanel({ session, loading, runRequest }: { session: Session; loading: boolean; runRequest: ApiRunner }) {
+const SUPPORT_FAQS: Array<{ question: string; answer: string }> = [
+  {
+    question: 'How many working days do I have to complete in total for my internships?',
+    answer:
+      'Students must complete 60 working days of internship in total during their undergraduate education.',
+  },
+  {
+    question: 'When can I do my internships?',
+    answer:
+      'Internships take place in the 2nd Year Summer Period (transitioning from 2nd to 3rd grade) and the 3rd Year Summer Period (transitioning from 3rd to 4th grade). Internships cannot be done in the first year.',
+  },
+  {
+    question: 'Can I split a single internship period into smaller blocks?',
+    answer:
+      'An internship period cannot be divided. Each of the 2nd and 3rd year internships can be done as 30 working days in two different institutions, or as 20 working days in three different institutions. Internships shorter than 20 working days are not accepted.',
+  },
+  {
+    question: 'Do public holidays count toward the internship period?',
+    answer:
+      'No. Public holidays cannot be included in the internship period. Start and end dates must be adjusted accordingly.',
+  },
+  {
+    question: 'What happens if I am absent during the internship?',
+    answer:
+      'If you do not attend more than 20% of the internship period, the internship is considered unsuccessful.',
+  },
+  {
+    question: 'Can I do more than one internship at the same organization?',
+    answer:
+      'No. More than one internship cannot be done in the same organization.',
+  },
+  {
+    question: 'What kind of supervisor must the workplace have?',
+    answer:
+      'There must be at least one computer engineer or one electric/electronic engineer working at the institution. The internship result document is filled in by the most senior of these engineers working with you.',
+  },
+  {
+    question: 'In what language must the internship report be written?',
+    answer:
+      'Internship reports must be written in English.',
+  },
+  {
+    question: 'Which documents do I need to submit after the internship?',
+    answer:
+      'You must submit the Internship Result Document, the Internship Report, and the Internship Report Evaluation Document. The Result Document and the Evaluation Document are filled in, signed and stamped by the authorized internship officer at the institution.',
+  },
+  {
+    question: 'What is the deadline for submitting end-of-internship documents?',
+    answer:
+      'All three documents must be delivered at the latest 1 month after the start of the following course period. Documents submitted late will not be accepted and the internship will be deemed invalid.',
+  },
+  {
+    question: 'When are submitted documents evaluated?',
+    answer:
+      'Delivered documents are evaluated within 3 days following the delivery date by the Internship Board.',
+  },
+  {
+    question: 'Which course must I register for to submit my internship?',
+    answer:
+      'You must register for BBM 325 or BBM 425 in the first fall or spring semester following your internship and submit the report and documents within the scope of that course. Otherwise the internship is deemed invalid.',
+  },
+  {
+    question: 'Can I do my BBM 325 and BBM 425 internships in back-to-back semesters?',
+    answer:
+      'No. There must be at least one semester (fall or spring) between the internships submitted under BBM 325 and BBM 425. Otherwise the BBM 425 course will be failed.',
+  },
+  {
+    question: 'What additional document is required for the 3rd year internship?',
+    answer:
+      'For 3rd year internships, the Multidisciplinary Internship Commitment Document must be signed and submitted together with the Internship Acceptance Document before the internship starts. If multidisciplinary work is not possible, a justified petition approved by the student advisor and internship coordinator must be submitted instead.',
+  },
+  {
+    question: 'Which documents do I need to prepare before the internship starts?',
+    answer:
+      'You need the Application and Acceptance form for the workplace, and a Declaration and Commitment document — either the "Health Service Recipient" version if you are covered by a family member\'s insurance, or the "Not Receiving Health Care" version otherwise. These must be submitted to the department at least 20 days before the internship start date.',
+  },
+  {
+    question: 'Who opens the sealed Internship Result envelope?',
+    answer:
+      'The envelope containing the Internship Result Document is sealed by the internship officer at the institution and must never be opened by the student. It is delivered to the department either by the student or by post.',
+  },
+];
+
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="workspace-stack">
-      <WorkspaceHero
-        tone="support"
-        eyebrow="Support companion"
-        title="A shared help layer that still feels native to the premium workspace."
-        body="Search FAQs, use autocomplete and ask the assistant without leaving the visual system or breaking your current role flow."
-      />
+    <article className={`faq-item${open ? ' open' : ''}`}>
+      <button type="button" className="faq-question" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span>{question}</span>
+        <span className="faq-chevron" aria-hidden="true">{open ? '−' : '+'}</span>
+      </button>
+      {open ? <p className="faq-answer">{answer}</p> : null}
+    </article>
+  );
+}
 
-      <MetricsRow
-        items={[
-          { label: 'Access', value: session ? 'Authenticated' : 'Guest mode', detail: 'Support remains useful before and after login.' },
-          { label: 'Discovery', value: 'Fast', detail: 'Autocomplete helps users find known tasks quickly.' },
-          { label: 'Self-service', value: 'Enabled', detail: 'Chatbot and FAQ endpoints reduce dependency on manual support.' },
-        ]}
-      />
+export function SupportPanel({ session: _session, loading: _loading, runRequest: _runRequest }: { session: Session; loading: boolean; runRequest: ApiRunner }) {
+  return (
+    <div className="workspace-stack faq-stack">
+      <header className="faq-header">
+        <p className="eyebrow">Frequently Asked Questions</p>
+        <h2>Internship rules at a glance</h2>
+        <p className="meta">Quick answers to the most common questions about the BBM 325 / BBM 425 internship process.</p>
+      </header>
 
-      <ActionGrid>
-        <ActionCard
-          title="List FAQs"
-          body="Load the FAQ set from the support service and review the latest self-service content."
-          actionLabel="Show FAQs"
-          disabled={loading}
-          onAction={() => runRequest('FAQs fetched', () => apiCall('/api/support/faqs', 'GET', session?.token))}
-        />
-        <ActionCard
-          title="Try autocomplete"
-          body="Query support autocomplete with a sample report-related term to test guided discovery."
-          actionLabel="Run autocomplete"
-          disabled={loading}
-          onAction={() => runRequest('Autocomplete results fetched', () => apiCall('/api/support/autocomplete?query=report', 'GET', session?.token))}
-        />
-        <ActionCard
-          title="Ask the chatbot"
-          body="Send a sample support question and inspect the assistant response from the backend."
-          actionLabel="Ask question"
-          disabled={loading}
-          onAction={() => runRequest('Chatbot answer received', () => apiCall('/api/support/chatbot?question=How to submit report?', 'GET', session?.token))}
-        />
-      </ActionGrid>
+      <div className="faq-list">
+        {SUPPORT_FAQS.map((faq) => (
+          <FaqItem key={faq.question} question={faq.question} answer={faq.answer} />
+        ))}
+      </div>
     </div>
   );
 }
