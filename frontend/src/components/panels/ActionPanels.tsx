@@ -1479,11 +1479,39 @@ type BulkStudentImportResult = {
   skipped: string[];
 };
 
+type StudentSummary = {
+  id: number;
+  studentNumber: string;
+  name: string | null;
+  surname: string | null;
+  department: string | null;
+  currentYear: string | null;
+  email: string | null;
+};
+
+type StudentsPage = {
+  content: StudentSummary[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+};
+
+const STUDENTS_PAGE_SIZE = 10;
+
 export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
   const [file, setFile] = useState<File | null>(null);
   const [importError, setImportError] = useState('');
   const [result, setResult] = useState<BulkStudentImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [students, setStudents] = useState<StudentSummary[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   function resetFileInput() {
     setFile(null);
@@ -1491,6 +1519,33 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
       fileInputRef.current.value = '';
     }
   }
+
+  async function fetchStudents(targetPage: number) {
+    setStudentsLoading(true);
+    setStudentsError('');
+    try {
+      const response = await apiCall(
+        `/api/admin/students?page=${targetPage}&size=${STUDENTS_PAGE_SIZE}`,
+        'GET',
+        session.token,
+      );
+      const data = response?.data as StudentsPage | undefined;
+      if (data) {
+        setStudents(data.content ?? []);
+        setTotalPages(data.totalPages ?? 0);
+        setTotalElements(data.totalElements ?? 0);
+      }
+    } catch (error) {
+      setStudentsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setStudentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void fetchStudents(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function handleUpload() {
     if (!file) {
@@ -1511,9 +1566,44 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
           setResult(data);
         }
         resetFileInput();
+        if (page === 0) {
+          void fetchStudents(0);
+        } else {
+          setPage(0);
+        }
         return response;
       } catch (error) {
         setImportError(error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+    });
+  }
+
+  function handleDeleteRequest(studentId: number) {
+    setDeleteError('');
+    setDeleteConfirmId(studentId);
+  }
+
+  function cancelDelete() {
+    setDeleteConfirmId(null);
+    setDeleteError('');
+  }
+
+  async function confirmDelete(student: StudentSummary) {
+    setDeleteError('');
+    void runRequest(`Student ${student.studentNumber} deleted`, async () => {
+      try {
+        const response = await apiCall(`/api/admin/students/${student.id}`, 'DELETE', session.token);
+        setDeleteConfirmId(null);
+        const isLastOnPage = students.length === 1 && page > 0;
+        if (isLastOnPage) {
+          setPage(page - 1);
+        } else {
+          await fetchStudents(page);
+        }
+        return response;
+      } catch (error) {
+        setDeleteError(error instanceof Error ? error.message : String(error));
         throw error;
       }
     });
@@ -1583,6 +1673,97 @@ export function AdminOpsPanel({ session, loading, runRequest }: PanelProps) {
           )}
         </section>
       ) : null}
+
+      <section className="form-card student-list-card">
+        <div className="form-card-header">
+          <h3>Student users</h3>
+          <span className="meta">
+            {totalElements > 0
+              ? `Page ${Math.min(page + 1, Math.max(totalPages, 1))} of ${Math.max(totalPages, 1)} · ${totalElements} total`
+              : 'No students yet'}
+          </span>
+        </div>
+
+        {studentsError ? <p className="auth-error left-align">{studentsError}</p> : null}
+        {deleteError ? <p className="auth-error left-align">{deleteError}</p> : null}
+
+        {studentsLoading && students.length === 0 ? (
+          <p className="meta">Loading students…</p>
+        ) : students.length === 0 ? (
+          <p className="meta">There are no student users to display.</p>
+        ) : (
+          <ul className="student-rows">
+            {students.map((student) => {
+              const fullName = `${student.name ?? ''} ${student.surname ?? ''}`.trim() || '—';
+              const isConfirming = deleteConfirmId === student.id;
+              return (
+                <li key={student.id} className="student-row">
+                  <div className="student-row-info">
+                    <strong className="student-row-number">{student.studentNumber}</strong>
+                    <span className="student-row-name">{fullName}</span>
+                  </div>
+                  <div className="student-row-actions">
+                    {isConfirming ? (
+                      <>
+                        <span className="student-row-confirm-text">Are you sure you want to delete?</span>
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={loading}
+                          onClick={() => void confirmDelete(student)}
+                        >
+                          Yes, delete
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={loading}
+                          onClick={cancelDelete}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ghost-button danger-button"
+                        disabled={loading}
+                        onClick={() => handleDeleteRequest(student.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {totalPages > 1 ? (
+          <div className="student-pagination">
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={page === 0 || studentsLoading}
+              onClick={() => setPage(Math.max(page - 1, 0))}
+            >
+              Previous
+            </button>
+            <span className="meta">
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={page >= totalPages - 1 || studentsLoading}
+              onClick={() => setPage(Math.min(page + 1, totalPages - 1))}
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

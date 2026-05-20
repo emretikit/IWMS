@@ -1691,3 +1691,92 @@ pre {
   border-radius: 12px;
   background: rgba(176, 58, 46, 0.08);
 }
+
+.student-list-card {
+  display: grid;
+  gap: 12px;
+}
+
+.student-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 14px;
+  background: #fffafb;
+}
+
+.student-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.student-row-number {
+  color: #202833;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.student-row-name {
+  color: #5f6875;
+  font-size: 13px;
+}
+
+.student-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.student-row-actions .primary-button,
+.student-row-actions .ghost-button {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 12px;
+}
+
+.student-row-confirm-text {
+  color: #8d1320;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.student-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.student-pagination .ghost-button {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 12px;
+}
+
+@media (max-width: 640px) {
+  .student-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .student-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

@@ -18,5 +18,6 @@ public interface InternshipRepository extends JpaRepository<Internship, Long> {
     List<Internship> findByStudentUserId(Long userId);
     List<Internship> findBySupervisorCompanyEmailIgnoreCase(String companyEmail);
     long countByAcademicPeriodId(Long periodId);
+    long countByStudentId(Long studentId);
     List<Internship> findByCompanyId(Long companyId);
 }
