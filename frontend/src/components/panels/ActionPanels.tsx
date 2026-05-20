@@ -1420,55 +1420,342 @@ export function ProfilePanel({ session, loading, runRequest }: PanelProps) {
   );
 }
 
+type CoordinatorInternship = {
+  id: number;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  totalWorkingDays: number | null;
+  absentDays: number;
+  isMultidisciplinary: boolean;
+  absenceCompliant?: boolean;
+  student?: {
+    id: number;
+    studentNumber: string;
+    department?: string | null;
+    currentYear?: string | null;
+    user?: { name?: string | null; surname?: string | null; email?: string | null } | null;
+  } | null;
+  company?: { id: number; name: string } | null;
+  academicPeriod?: { id: number; name: string; submissionDeadline?: string | null; minInternshipDays?: number | null } | null;
+  report?: {
+    id: number;
+    submissionStatus?: string | null;
+    draft?: boolean;
+    submittedAt?: string | null;
+    fileName?: string | null;
+    templateContent?: string | null;
+  } | null;
+  evaluation?: {
+    id: number;
+    result?: string | null;
+    feedback?: string | null;
+    documentsComplete?: boolean;
+    rulesCompliant?: boolean;
+  } | null;
+};
+
+type DecisionStatus = 'APPROVED' | 'REJECTED' | 'REVISION_REQUIRED';
+
+function formatStatusLabel(status: string) {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((part) => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : ''))
+    .join(' ');
+}
+
+function computeViolations(internship: CoordinatorInternship): string[] {
+  const flags: string[] = [];
+  const minDays = internship.academicPeriod?.minInternshipDays ?? 20;
+  if (internship.totalWorkingDays != null && internship.totalWorkingDays < minDays) {
+    flags.push(`Below ${minDays}-day minimum (${internship.totalWorkingDays} days)`);
+  }
+  if (internship.absenceCompliant === false) {
+    flags.push(`Absence exceeds 20% (${internship.absentDays} day${internship.absentDays === 1 ? '' : 's'})`);
+  }
+  if (internship.report?.submissionStatus === 'LATE') {
+    flags.push('Report submitted late');
+  }
+  if (!internship.report) {
+    flags.push('Report missing');
+  } else if (internship.report.draft && internship.report.submissionStatus !== 'SUBMITTED') {
+    flags.push('Report is still in draft');
+  }
+  if (!internship.evaluation) {
+    flags.push('Company evaluation missing');
+  }
+  return flags;
+}
+
 export function CoordinatorPanel({ session, loading, runRequest }: PanelProps) {
+  const [internships, setInternships] = useState<CoordinatorInternship[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [decisionStatus, setDecisionStatus] = useState<Record<number, DecisionStatus>>({});
+  const [feedback, setFeedback] = useState<Record<number, string>>({});
+  const [rowError, setRowError] = useState<Record<number, string>>({});
+
+  async function loadPending() {
+    setListLoading(true);
+    setListError('');
+    try {
+      const response = await apiCall('/api/coordinator/pending', 'GET', session.token);
+      const data = (response?.data as CoordinatorInternship[] | undefined) ?? [];
+      setInternships(data);
+    } catch (error) {
+      setListError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggleExpanded(id: number) {
+    setExpandedId((current) => (current === id ? null : id));
+  }
+
+  async function submitDecision(internship: CoordinatorInternship) {
+    const status = decisionStatus[internship.id];
+    const feedbackText = (feedback[internship.id] ?? '').trim();
+    if (!status) {
+      setRowError((prev) => ({ ...prev, [internship.id]: 'Please choose a decision first.' }));
+      return;
+    }
+    if (!feedbackText) {
+      setRowError((prev) => ({
+        ...prev,
+        [internship.id]: 'Feedback is required before submitting a decision.',
+      }));
+      return;
+    }
+    setRowError((prev) => ({ ...prev, [internship.id]: '' }));
+
+    void runRequest(`Coordinator decision recorded (${status})`, async () => {
+      try {
+        const response = await apiCall(
+          `/api/coordinator/internships/${internship.id}/decision`,
+          'PUT',
+          session.token,
+          { status, feedback: feedbackText },
+        );
+        setDecisionStatus((prev) => {
+          const next = { ...prev };
+          delete next[internship.id];
+          return next;
+        });
+        setFeedback((prev) => {
+          const next = { ...prev };
+          delete next[internship.id];
+          return next;
+        });
+        setExpandedId(null);
+        await loadPending();
+        return response;
+      } catch (error) {
+        setRowError((prev) => ({
+          ...prev,
+          [internship.id]: error instanceof Error ? error.message : String(error),
+        }));
+        throw error;
+      }
+    });
+  }
+
   return (
     <div className="workspace-stack">
-      <WorkspaceHero
-        tone="coordinator"
-        eyebrow="Coordinator decision board"
-        title="Move from queue chaos to a disciplined review command center."
-        body="The coordinator dashboard prioritizes pending reviews, decision velocity and feedback quality with a stronger information hierarchy."
-      />
+      <header className="faq-header">
+        <p className="eyebrow">Coordinator review queue</p>
+        <h2>Pending internship reviews</h2>
+        <p className="meta">
+          Review each pending submission, inspect the student report and company evaluation, then approve, reject or
+          request a revision with clear feedback.
+        </p>
+      </header>
 
-      <MetricsRow
-        items={[
-          { label: 'Pending reviews', value: 'Queue based', detail: 'Load real pending coordinator items from the backend.' },
-          { label: 'Decision mode', value: 'Revision', detail: 'Sample action requests additional work on a report.' },
-          { label: 'Feedback quality', value: 'Visible', detail: 'Structured comments stay central to the decision flow.' },
-        ]}
-      />
+      <section className="form-card coordinator-queue-card">
+        <div className="form-card-header">
+          <h3>Queue ({internships.length})</h3>
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={listLoading || loading}
+            onClick={() => void loadPending()}
+          >
+            {listLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
 
-      <ActionGrid>
-        <ActionCard
-          title="List pending reviews"
-          body="Fetch all internships waiting for coordinator attention and inspect the active decision queue."
-          actionLabel="Load review queue"
-          disabled={loading}
-          onAction={() => runRequest('Coordinator queue fetched', () => apiCall('/api/coordinator/pending', 'GET', session.token))}
-        />
-        <ActionCard
-          title="Request revision"
-          body="Mark a sample internship as revision required and send clear guidance back into the process."
-          actionLabel="Mark revision"
-          disabled={loading}
-          onAction={() =>
-            runRequest('Revision requested', () =>
-              apiCall('/api/coordinator/internships/1/decision', 'PUT', session.token, {
-                status: 'REVISION_REQUIRED',
-                feedback: 'Please improve report details.',
-              }),
-            )
-          }
-        />
-        <InsightList
-          title="Coordinator principles"
-          items={[
-            'Shorter feedback loops reduce student uncertainty dramatically.',
-            'Review queues work best when policy rules stay current.',
-            'Consistent revision notes lead to cleaner second submissions.',
-          ]}
-        />
-      </ActionGrid>
+        {listError ? <p className="auth-error left-align">{listError}</p> : null}
+
+        {listLoading && internships.length === 0 ? (
+          <p className="meta">Loading review queue…</p>
+        ) : internships.length === 0 ? (
+          <p className="meta">There are no internships waiting for coordinator review.</p>
+        ) : (
+          <ul className="coordinator-queue">
+            {internships.map((item) => {
+              const name = `${item.student?.user?.name ?? ''} ${item.student?.user?.surname ?? ''}`.trim() || '—';
+              const isExpanded = expandedId === item.id;
+              const violations = computeViolations(item);
+              const currentStatus = decisionStatus[item.id];
+              const error = rowError[item.id];
+              return (
+                <li key={item.id} className="coordinator-queue-item">
+                  <div className="coordinator-queue-head">
+                    <div className="coordinator-queue-summary">
+                      <strong>{item.student?.studentNumber ?? `#${item.id}`}</strong>
+                      <span>{name}</span>
+                      <span className="meta">{item.company?.name ?? 'Unknown company'}</span>
+                    </div>
+                    <div className="coordinator-queue-status">
+                      <span className="status-chip">{formatStatusLabel(item.status)}</span>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={loading}
+                        onClick={() => toggleExpanded(item.id)}
+                      >
+                        {isExpanded ? 'Hide' : 'Review'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="coordinator-queue-meta">
+                    <span className="meta">
+                      Dates: {item.startDate ?? '—'} → {item.endDate ?? '—'}
+                    </span>
+                    <span className="meta">
+                      Working days: {item.totalWorkingDays ?? '—'} · Absent: {item.absentDays}
+                    </span>
+                    {item.academicPeriod?.name ? (
+                      <span className="meta">Period: {item.academicPeriod.name}</span>
+                    ) : null}
+                    {item.isMultidisciplinary ? (
+                      <span className="status-chip">Multidisciplinary</span>
+                    ) : null}
+                  </div>
+
+                  {violations.length > 0 ? (
+                    <ul className="coordinator-violations">
+                      {violations.map((v) => (
+                        <li key={v} className="auth-error left-align">⚠ {v}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {isExpanded ? (
+                    <div className="coordinator-detail">
+                      <div className="coordinator-detail-grid">
+                        <div className="detail-stack">
+                          <p className="eyebrow">Report</p>
+                          {item.report ? (
+                            <>
+                              <p className="meta">
+                                Status: {item.report.submissionStatus ?? '—'} ·{' '}
+                                {item.report.draft ? 'Draft' : 'Final'}
+                              </p>
+                              {item.report.submittedAt ? (
+                                <p className="meta">Submitted at: {item.report.submittedAt}</p>
+                              ) : null}
+                              {item.report.fileName ? (
+                                <p className="meta">File: {item.report.fileName}</p>
+                              ) : null}
+                              {item.report.templateContent ? (
+                                <pre className="coordinator-report-content">
+                                  {item.report.templateContent}
+                                </pre>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="meta">No report has been submitted.</p>
+                          )}
+                        </div>
+
+                        <div className="detail-stack">
+                          <p className="eyebrow">Company evaluation</p>
+                          {item.evaluation ? (
+                            <>
+                              <p className="meta">Result: {item.evaluation.result ?? '—'}</p>
+                              <p className="meta">
+                                Documents complete: {item.evaluation.documentsComplete ? 'Yes' : 'No'} ·{' '}
+                                Rules compliant: {item.evaluation.rulesCompliant ? 'Yes' : 'No'}
+                              </p>
+                              {item.evaluation.feedback ? (
+                                <p className="meta">Notes: {item.evaluation.feedback}</p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="meta">Company has not submitted an evaluation yet.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="coordinator-decision">
+                        <p className="eyebrow">Decision</p>
+                        <div className="coordinator-decision-options">
+                          {(['APPROVED', 'REJECTED', 'REVISION_REQUIRED'] as DecisionStatus[]).map((option) => (
+                            <label key={option} className="coordinator-decision-chip">
+                              <input
+                                type="radio"
+                                name={`decision-${item.id}`}
+                                value={option}
+                                checked={currentStatus === option}
+                                onChange={() =>
+                                  setDecisionStatus((prev) => ({ ...prev, [item.id]: option }))
+                                }
+                              />
+                              <span>{formatStatusLabel(option)}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        <label className="field">
+                          <span>Feedback (required)</span>
+                          <textarea
+                            rows={4}
+                            value={feedback[item.id] ?? ''}
+                            onChange={(event) =>
+                              setFeedback((prev) => ({ ...prev, [item.id]: event.target.value }))
+                            }
+                            placeholder="Share guidance for the student. Required for any decision."
+                          />
+                        </label>
+
+                        {error ? <p className="auth-error left-align">{error}</p> : null}
+
+                        <div className="request-actions">
+                          <button
+                            type="button"
+                            className="primary-button"
+                            disabled={loading}
+                            onClick={() => void submitDecision(item)}
+                          >
+                            {loading ? 'Submitting…' : 'Submit decision'}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={loading}
+                            onClick={() => setExpandedId(null)}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
